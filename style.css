@@ -1,0 +1,43 @@
+:root {
+    --bg-color: #121212;
+    --panel-bg: #1e1e1e;
+    --text-color: #e0e0e0;
+    --accent-color: #00ff88;
+    --danger-color: #ff3333;
+    --peak-color: #ffffff;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+
+body { background-color: var(--bg-color); color: var(--text-color); display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+
+button { cursor: pointer; border: none; outline: none; transition: 0.2s; }
+
+main { background: var(--panel-bg); width: 100%; max-width: 600px; padding: 30px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); border: 1px solid #333; }
+
+header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 20px; margin-bottom: 20px; }
+h1 { font-size: 1.4rem; color: #888; text-transform: uppercase; letter-spacing: 2px; }
+
+.status-idle { color: #888; }
+.status-recording { color: var(--danger-color); text-shadow: 0 0 10px var(--danger-color); font-weight: bold; }
+.status-playing { color: var(--accent-color); text-shadow: 0 0 10px var(--accent-color); font-weight: bold; }
+
+.timer-display { text-align: center; margin-bottom: 30px; font-family: monospace; }
+#time-remaining { font-size: 4rem; display: block; color: var(--accent-color); text-shadow: 0 0 15px rgba(0, 255, 136, 0.3); }
+
+/* VU Meter Profissional */
+.vu-meter-container { background: #0a0a0a; padding: 15px; border-radius: 8px; border: 1px inset #333; }
+.vu-scale { display: flex; justify-content: space-between; font-size: 0.7rem; color: #666; margin-bottom: 5px; }
+.vu-track { width: 100%; height: 20px; background: #111; position: relative; border-radius: 3px; overflow: hidden; display: flex; align-items: center; }
+
+.vu-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #00ff00 0%, #ffff00 70%, #ff0000 100%); transition: width 0.05s ease-out; }
+.vu-peak { width: 3px; height: 100%; background: var(--peak-color); position: absolute; left: 0%; box-shadow: 0 0 5px rgba(255,255,255,0.8); transition: left 0.05s linear; }
+
+.controls-section { margin-top: 30px; display: flex; flex-direction: column; gap: 20px; }
+.control-group { display: flex; justify-content: space-between; align-items: center; background: #2a2a2a; padding: 15px; border-radius: 8px; }
+select { background: #111; color: #fff; border: 1px solid #444; padding: 8px; border-radius: 4px; }
+
+.btn-action { background: #333; color: #fff; padding: 15px; border-radius: 8px; font-weight: bold; letter-spacing: 1px; }
+.btn-action:hover { background: #444; }
+
+footer { text-align: center; margin-top: 30px; font-size: 0.9rem; color: #666; }
