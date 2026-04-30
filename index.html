@@ -7,12 +7,12 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Interface Principal (Abre diretamente) -->
     <main id="app-interface">
         <header>
             <h1>Z-Link Echo</h1>
             <div class="status-panel">
-                <span id="status-indicator" class="status-idle">AGUARDANDO AÇÃO...</span>
+                <!-- Status inicial alterado para PRONTO -->
+                <span id="status-indicator" class="status-idle">PRONTO</span>
             </div>
         </header>
 
@@ -22,7 +22,6 @@
                 <small>SEGUNDOS</small>
             </div>
 
-            <!-- VU Meter Profissional (RMS + Peak) -->
             <div class="vu-meter-container">
                 <div class="vu-scale">
                     <span>-60</span><span>-40</span><span>-20</span><span>-10</span><span>0 dB</span>
@@ -46,7 +45,6 @@
                     <option value="1H">A cada Hora Cheia</option>
                 </select>
             </div>
-            
             <button id="btn-ouvir-hora" class="btn-action">Ouvir Hora Atual</button>
         </section>
 
