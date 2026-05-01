@@ -10,7 +10,7 @@ let audioCtx, analyser, micStream, mediaRecorder;
 let audioChunks = [];
 let isRecording = false;
 let isPlaying = false;
-let isSystemReady = false; // Só libera após o boot
+let isSystemReady = false; 
 let forceWaitRelease = false; 
 let activeKey = null;
 
@@ -21,6 +21,10 @@ let dataArray;
 let peakValue = 0;
 let peakHoldCounter = 0;
 
+// Variáveis de Controle Inteligente
+let pendingAnnouncement = false;
+let idleTimer = null;
+
 // Elementos da DOM
 const statusIndicator = document.getElementById('status-indicator');
 const timeDisplay = document.getElementById('time-remaining');
@@ -28,34 +32,41 @@ const vuBar = document.getElementById('vu-bar');
 const vuPeak = document.getElementById('vu-peak');
 const selectAutoTime = document.getElementById('auto-announce');
 const btnOuvirHora = document.getElementById('btn-ouvir-hora');
+const clockDisplay = document.getElementById('clock-display');
+
+// ==========================================
+// 🕒 RELÓGIO EM TEMPO REAL
+// ==========================================
+setInterval(() => {
+    const agora = new Date();
+    clockDisplay.innerText = 
+        agora.getHours().toString().padStart(2, '0') + ':' + 
+        agora.getMinutes().toString().padStart(2, '0') + ':' + 
+        agora.getSeconds().toString().padStart(2, '0');
+}, 1000);
 
 // ==========================================
 // 🚀 INICIALIZAÇÃO TOTALMENTE AUTOMÁTICA
 // ==========================================
-
 window.onload = () => {
-    loadPreferences(); // Carrega localStorage imediatamente
+    loadPreferences(); 
     forceInitialize();
 };
 
 async function forceInitialize() {
     try {
-        // 1. Criar AudioContext imediatamente
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         
-        // 2. Tentar resume imediato (Fallback em loop se o ambiente bloquear)
         const tryResume = async () => {
             if (audioCtx.state === 'suspended') {
                 await audioCtx.resume();
-                setTimeout(tryResume, 500); // Tenta novamente em breve se falhar
+                setTimeout(tryResume, 500); 
             }
         };
         tryResume();
 
-        // 3. Solicitar microfone automaticamente
         micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-        // Configuração técnica do áudio
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 2048;
         dataArray = new Float32Array(analyser.frequencyBinCount);
@@ -64,18 +75,16 @@ async function forceInitialize() {
         startVUMeter();
         startClockSync();
 
-        // 4. Iniciar sequência de boot automaticamente
         await runBootSequence();
 
     } catch (err) {
-        console.warn("Aguardando permissões ou interação do ambiente...");
-        // Fallback: Se falhar (ex: permissão negada no momento), tenta novamente em 2 segundos
-        setTimeout(forceInitialize, 2000);
+        console.warn("Aguardando permissões ou liberação do ambiente WebView...");
+        setTimeout(forceInitialize, 2000); // Retry fallback infinito
     }
 }
 
 async function runBootSequence() {
-    isPlaying = true; // Bloqueia PTT durante boot
+    isPlaying = true; 
     setStatus('INICIALIZANDO...', 'status-playing');
 
     await playBeep(TONE_START_FREQ, TONE_DURATION);
@@ -88,7 +97,29 @@ async function runBootSequence() {
 }
 
 // ==========================================
-// CONTROLE DE TECLADO (PTT) - MANTIDO
+// 🧠 COMPORTAMENTO INTELIGENTE DE HORA
+// ==========================================
+function resetIdleTimer() {
+    if (idleTimer) {
+        clearTimeout(idleTimer);
+        idleTimer = null;
+    }
+}
+
+function checkIdleState() {
+    if (pendingAnnouncement && !isRecording && !isPlaying && !forceWaitRelease) {
+        resetIdleTimer();
+        idleTimer = setTimeout(() => {
+            if (!isRecording && !isPlaying && !forceWaitRelease) {
+                pendingAnnouncement = false;
+                executarAnuncioDeHora();
+            }
+        }, 10000); // Aguarda 10 segundos inativo
+    }
+}
+
+// ==========================================
+// CONTROLE DE TECLADO (PTT)
 // ==========================================
 window.addEventListener('keydown', async (e) => {
     if (!isSystemReady || isPlaying) return;
@@ -118,10 +149,11 @@ window.addEventListener('keyup', async (e) => {
 });
 
 // ==========================================
-// GRAVAÇÃO E REPRODUÇÃO - MANTIDO
+// GRAVAÇÃO E REPRODUÇÃO
 // ==========================================
 async function startRecording() {
     try {
+        resetIdleTimer(); // Cancela o timer se for pressionado nos 10s de carência
         isRecording = true;
         audioChunks = [];
         setStatus('GRAVANDO...', 'status-recording');
@@ -154,6 +186,7 @@ function stopRecording() {
 }
 
 async function processAndPlayRecording() {
+    resetIdleTimer(); // Proteção extra para garantir que não anuncie
     isPlaying = true;
     setStatus('REPRODUZINDO...', 'status-playing');
     
@@ -161,16 +194,23 @@ async function processAndPlayRecording() {
     const arrayBuffer = await audioBlob.arrayBuffer();
     const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
 
+    // Calcular tempo total (Subtons + Áudio)
+    const totalDuration = (TONE_DURATION / 1000) * 2 + audioBuffer.duration;
+    startPlaybackTimer(totalDuration);
+
     await playBeep(TONE_START_FREQ, TONE_DURATION);
     await playBuffer(audioBuffer);
     await playBeep(TONE_END_FREQ, TONE_DURATION);
 
+    stopPlaybackTimer();
     isPlaying = false;
     setStatus('PRONTO', 'status-idle');
+
+    checkIdleState(); // Avalia se tem anúncio pendente para iniciar os 10s
 }
 
 // ==========================================
-// SUBTONS E ARQUIVOS - MANTIDO
+// SUBTONS E ARQUIVOS
 // ==========================================
 function playBeep(frequency, duration) {
     return new Promise((resolve) => {
@@ -214,42 +254,59 @@ function playBuffer(buffer) {
 }
 
 // ==========================================
-// HORA E PERSISTÊNCIA - MANTIDO
+// HORA E PERSISTÊNCIA
 // ==========================================
 btnOuvirHora.addEventListener('click', () => {
     if (!isSystemReady || isPlaying || isRecording) return;
+    pendingAnnouncement = false; // Como forçou manualmente, retira a pendência
+    resetIdleTimer();
     executarAnuncioDeHora();
 });
 
 async function executarAnuncioDeHora() {
+    resetIdleTimer();
     isPlaying = true;
-    setStatus('HORA...', 'status-playing');
+    setStatus('ANUNCIANDO HORA...', 'status-playing');
+    
     const agora = new Date();
     const hora = agora.getHours().toString().padStart(2, '0');
     const minuto = agora.getMinutes().toString().padStart(2, '0');
+    
     await playBeep(TONE_START_FREQ, TONE_DURATION);
     await playAudioFile('chamada.mp3');
     await playAudioFile(`${hora}h.mp3`);
     await playAudioFile(`${minuto}m.mp3`);
     await playBeep(TONE_END_FREQ, TONE_DURATION);
+    
     isPlaying = false;
     setStatus('PRONTO', 'status-idle');
+    checkIdleState(); 
 }
 
 function startClockSync() {
     setInterval(() => {
-        if (!isSystemReady || isPlaying || isRecording) return;
+        if (!isSystemReady) return;
         const agora = new Date();
         const config = selectAutoTime.value;
+        
         if (agora.getSeconds() === 0) {
             const currentMinute = agora.getMinutes();
             let deveAnunciar = false;
+            
             if (config === '1M') deveAnunciar = true;
             else if (config === '5M' && currentMinute % 5 === 0) deveAnunciar = true;
             else if (config === '15M' && currentMinute % 15 === 0) deveAnunciar = true;
             else if (config === '30M' && currentMinute % 30 === 0) deveAnunciar = true;
             else if (config === '1H' && currentMinute === 0) deveAnunciar = true;
-            if (deveAnunciar) executarAnuncioDeHora();
+            
+            if (deveAnunciar) {
+                // Checa se está ocupado para decidir se joga na fila ou executa
+                if (isRecording || isPlaying || forceWaitRelease) {
+                    pendingAnnouncement = true;
+                } else {
+                    executarAnuncioDeHora();
+                }
+            }
         }
     }, 1000); 
 }
@@ -261,7 +318,7 @@ function loadPreferences() {
 }
 
 // ==========================================
-// VU METER E TIMERS - MANTIDO
+// VU METER E TIMERS
 // ==========================================
 function startTimer() {
     timeRemaining = MAX_RECORD_TIME;
@@ -278,6 +335,21 @@ function startTimer() {
 
 function stopTimer() {
     clearInterval(recordTimerInterval);
+    timeDisplay.innerText = "120.0";
+}
+
+let playbackTimerInterval;
+function startPlaybackTimer(duration) {
+    timeRemaining = duration;
+    timeDisplay.innerText = Math.max(0, timeRemaining).toFixed(1);
+    playbackTimerInterval = setInterval(() => {
+        timeRemaining -= 0.1;
+        timeDisplay.innerText = Math.max(0, timeRemaining).toFixed(1);
+    }, 100);
+}
+
+function stopPlaybackTimer() {
+    clearInterval(playbackTimerInterval);
     timeDisplay.innerText = "120.0";
 }
 

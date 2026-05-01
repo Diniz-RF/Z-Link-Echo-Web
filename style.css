@@ -16,7 +16,10 @@ button { cursor: pointer; border: none; outline: none; transition: 0.2s; }
 main { background: var(--panel-bg); width: 100%; max-width: 600px; padding: 30px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); border: 1px solid #333; }
 
 header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 20px; margin-bottom: 20px; }
+
+.header-info { display: flex; flex-direction: column; gap: 5px; }
 h1 { font-size: 1.4rem; color: #888; text-transform: uppercase; letter-spacing: 2px; }
+#clock-display { font-size: 1.2rem; color: var(--accent-color); font-family: monospace; font-weight: bold; letter-spacing: 1px; }
 
 .status-idle { color: #888; }
 .status-recording { color: var(--danger-color); text-shadow: 0 0 10px var(--danger-color); font-weight: bold; }
