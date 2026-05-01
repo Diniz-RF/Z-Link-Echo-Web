@@ -21,6 +21,10 @@ let playbackCurrentTime = 0;
 let dataArray, peakValue = 0, peakHoldCounter = 0;
 let pendingAnnouncement = false, idleTimer = null;
 
+// Variáveis do Áudio Personalizado
+let customAudioData = null;
+let customAudioName = null;
+
 // Elementos da DOM
 const statusIndicator = document.getElementById('status-indicator');
 const timeLabel = document.getElementById('time-label');
@@ -29,6 +33,12 @@ const progressFill = document.getElementById('progress-fill');
 const vuBar = document.getElementById('vu-bar'), vuPeak = document.getElementById('vu-peak');
 const selectAutoTime = document.getElementById('auto-announce');
 const clockDisplay = document.getElementById('clock-display');
+
+// Elementos do Áudio Personalizado
+const customAudioInput = document.getElementById('custom-audio-input');
+const customAudioLabel = document.getElementById('custom-audio-label');
+const btnChooseFile = document.getElementById('btn-choose-file');
+const btnResetAudio = document.getElementById('btn-reset-audio');
 
 // ==========================================
 // 🕒 RELÓGIO E FORMATAÇÃO
@@ -185,7 +195,7 @@ function playBuffer(buf) {
 }
 
 // ==========================================
-// ⏰ HORA AUTOMÁTICA
+// ⏰ HORA AUTOMÁTICA & CUSTOM AUDIO
 // ==========================================
 document.getElementById('btn-ouvir-hora').onclick = () => {
     if (!isSystemReady || isPlaying || isRecording) return;
@@ -197,8 +207,30 @@ async function executarAnuncioDeHora() {
     const agora = new Date();
     const h = agora.getHours().toString().padStart(2, '0'), m = agora.getMinutes().toString().padStart(2, '0');
     await playBeep(TONE_START_FREQ, TONE_DURATION);
-    await playAudioFile('chamada.mp3'); await playAudioFile(`${h}h.mp3`); await playAudioFile(`${m}m.mp3`);
+    
+    // Tenta reproduzir o áudio personalizado se existir
+    let playedCustom = false;
+    if (customAudioData) {
+        try {
+            const resp = await fetch(customAudioData);
+            const arrayBuffer = await resp.arrayBuffer();
+            const buffer = await audioCtx.decodeAudioData(arrayBuffer);
+            await playBuffer(buffer);
+            playedCustom = true;
+        } catch (e) {
+            console.warn("Falha ao tocar áudio personalizado, ativando fallback.", e);
+        }
+    }
+    
+    // Fallback caso não tenha áudio personalizado ou tenha falhado
+    if (!playedCustom) {
+        await playAudioFile('chamada.mp3'); 
+    }
+    
+    await playAudioFile(`${h}h.mp3`); 
+    await playAudioFile(`${m}m.mp3`);
     await playBeep(TONE_END_FREQ, TONE_DURATION);
+    
     isPlaying = false; setStatus('PRONTO', 'status-idle'); checkIdleState();
 }
 
@@ -214,11 +246,93 @@ function startClockSync() {
     }, 1000);
 }
 
-function loadPreferences() { const s = localStorage.getItem('ptt_autoHora'); if (s) selectAutoTime.value = s; }
+// ==========================================
+// 📁 SELETOR DE ÁUDIO & PREFERÊNCIAS
+// ==========================================
+btnChooseFile.onclick = () => customAudioInput.click();
+btnResetAudio.onclick = resetCustomAudio;
+
+customAudioInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Garante que o AudioContext está pronto
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+        // Validação da duração (< 60 segundos)
+        if (audioBuffer.duration > 60) {
+            alert("Somente arquivos de até 60 segundos são permitidos.");
+            resetCustomAudio();
+            return;
+        }
+
+        // Converter para Base64 para persistência
+        const reader = new FileReader();
+        reader.onload = (e2) => {
+            const b64 = e2.target.result;
+            try {
+                localStorage.setItem('ptt_customAudioData', b64);
+                localStorage.setItem('ptt_customAudioName', file.name);
+                customAudioData = b64;
+                customAudioName = file.name;
+                updateAudioLabel();
+            } catch (err) {
+                alert("O arquivo é muito grande para ser salvo no navegador. Usando chamada padrão.");
+                resetCustomAudio();
+            }
+        };
+        reader.readAsDataURL(file);
+    } catch (err) {
+        console.error("Erro ao processar áudio", err);
+        alert("Erro ao ler o arquivo de áudio.");
+        resetCustomAudio();
+    }
+});
+
+function resetCustomAudio() {
+    customAudioData = null;
+    customAudioName = null;
+    localStorage.removeItem('ptt_customAudioData');
+    localStorage.removeItem('ptt_customAudioName');
+    customAudioInput.value = '';
+    updateAudioLabel();
+}
+
+function updateAudioLabel() {
+    if (customAudioData && customAudioName) {
+        customAudioLabel.innerText = customAudioName;
+        customAudioLabel.style.color = 'var(--accent-color)';
+        btnResetAudio.style.display = 'inline-block';
+    } else {
+        customAudioLabel.innerText = "Usando chamada padrão";
+        customAudioLabel.style.color = '#aaa';
+        btnResetAudio.style.display = 'none';
+    }
+}
+
+function loadPreferences() { 
+    // Carrega preferência de tempo automático
+    const s = localStorage.getItem('ptt_autoHora'); 
+    if (s) selectAutoTime.value = s; 
+    
+    // Carrega preferência de áudio personalizado
+    const savedAudio = localStorage.getItem('ptt_customAudioData');
+    const savedName = localStorage.getItem('ptt_customAudioName');
+    if (savedAudio) { 
+        customAudioData = savedAudio; 
+        customAudioName = savedName || 'Chamada personalizada'; 
+    }
+    updateAudioLabel();
+}
 selectAutoTime.onchange = (e) => localStorage.setItem('ptt_autoHora', e.target.value);
 
 // ==========================================
-// 📊 UI TIMERS
+// 📊 UI TIMERS & METERING
 // ==========================================
 function startTimer() {
     timeRemaining = MAX_RECORD_TIME; timeLabel.innerText = "Tempo Restante";

@@ -62,6 +62,20 @@
                     <option value="1H">A cada Hora Cheia</option>
                 </select>
             </div>
+
+            <!-- NOVO: Seletor de Áudio Personalizado -->
+            <div class="control-group file-group">
+                <div class="file-group-header">
+                    <label>Áudio da Chamada:</label>
+                    <button id="btn-reset-audio" class="btn-reset" title="Restaurar chamada padrão" style="display: none;">⟲ Padrão</button>
+                </div>
+                <div class="file-input-wrapper">
+                    <input type="file" id="custom-audio-input" accept="audio/*" class="hidden-input">
+                    <button type="button" id="btn-choose-file" class="btn-file">Escolher Arquivo</button>
+                    <span id="custom-audio-label" class="file-label">Usando chamada padrão</span>
+                </div>
+            </div>
+
             <button id="btn-ouvir-hora" class="btn-action">Ouvir Hora Atual</button>
         </section>
 
