@@ -31,7 +31,7 @@ let customAudioData = null;
 let customAudioName = null;
 
 // ==========================================
-// 🧠 VARIÁVEIS DTMF (ESTABILIZADAS)
+// 🧠 VARIÁVEIS DTMF
 // ==========================================
 let dtmfSequence = "";
 let lastDetectedKey = null;
@@ -74,7 +74,6 @@ function formatTime(totalSeconds) {
     return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-// 🧠 CORREÇÃO 1 — RESET VISUAL COMPLETO
 function resetDTMFUI() {
     dtmfResult.innerText = "AGUARDANDO";
     dtmfSequence = "";
@@ -99,7 +98,7 @@ function setStatus(txt, cls) {
 }
 
 // ==========================================
-// 🧠 LÓGICA DE DELAY (10 SEGUNDOS)
+// 🧠 LÓGICA DE DELAY
 // ==========================================
 function resetIdleTimer() { 
     if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; } 
@@ -123,7 +122,7 @@ function checkIdleState(isFromPTT = false) {
 }
 
 // ==========================================
-// 🎛️ DETECÇÃO DTMF (GOERTZEL + ESTABILIZAÇÃO)
+// 🎛️ DETECÇÃO DTMF
 // ==========================================
 function processDTMFFrame(buffer, sampleRate) {
     if (!sampleRate) return null;
@@ -177,9 +176,7 @@ function processDTMFFrame(buffer, sampleRate) {
             stableCount = 1;
         }
 
-        if (stableCount < STABLE_MIN) {
-            return null;
-        }
+        if (stableCount < STABLE_MIN) return null;
 
         const now = performance.now();
 
@@ -190,13 +187,10 @@ function processDTMFFrame(buffer, sampleRate) {
             dtmfSequence += stableKey;
             dtmfSequence = dtmfSequence.replace(/[^0-9]/g, '');
 
-            if (dtmfSequence.length > 10) {
-                dtmfSequence = dtmfSequence.slice(-10);
-            }
+            if (dtmfSequence.length > 10) dtmfSequence = dtmfSequence.slice(-10);
 
             dbgSeq.innerText = dtmfSequence;
 
-            // 🧠 CORREÇÃO 3 — CORRIGIR CÓDIGO DTMF REPLAY
             if (dtmfSequence.endsWith("737529")) {
                 dtmfResult.innerText = "REPLAY IDENTIFICADO";
                 dtmfCommand = "REPLAY";
@@ -211,7 +205,6 @@ function processDTMFFrame(buffer, sampleRate) {
         dbgKey.innerText = "-";
         const now = performance.now();
         if (lastDetectedKey !== null && (now - lastToneTime > RELEASE_TIMEOUT)) {
-            // Limpeza automática se ficar ocioso durante a digitação
             lastDetectedKey = null;
             stableKey = null;
             stableCount = 0;
@@ -245,28 +238,16 @@ async function startRecording() {
         mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
         mediaRecorder.onstop = () => {
             recSource.disconnect();
-
             if (dtmfCommand !== null) {
                 audioChunks = [];
                 resetTimerUI();
                 timeRemaining = MAX_RECORD_TIME;
-
-                // 🧠 CORREÇÃO 2 — APLICAR RESET AO FINAL
-                if (dtmfCommand === "REPLAY") {
-                    executarReplay().finally(resetToIdle);
-                }
-
-                if (dtmfCommand === "HORA") {
-                    executarAnuncioDeHora().finally(resetToIdle);
-                }
-
+                if (dtmfCommand === "REPLAY") executarReplay().finally(resetToIdle);
+                if (dtmfCommand === "HORA") executarAnuncioDeHora().finally(resetToIdle);
                 dtmfCommand = null;
                 return;
             }
-
-            if (!forceWaitRelease) {
-                processAndPlayRecording();
-            }
+            if (!forceWaitRelease) processAndPlayRecording();
         };
         mediaRecorder.start(); 
         startTimer();
@@ -296,9 +277,7 @@ async function processAndPlayRecording() {
         await playBuffer(audioBuffer);
         await playBeep(TONE_END_FREQ, TONE_DURATION);
         stopPlaybackTimer(); 
-    } catch (e) { 
-        console.error(e); 
-    }
+    } catch (e) { console.error(e); }
     isPlayingPTT = false; isPlaying = false;
     resetToIdle();
     checkIdleState(true); 
@@ -336,6 +315,7 @@ async function executarAnuncioDeHora() {
     isPlaying = false; 
 }
 
+// 🎯 ATUALIZADO: Sequência de REPLAY corrigida
 async function executarReplay() {
     if (isPlaying) return;
     isPlaying = true;
@@ -350,10 +330,15 @@ async function executarReplay() {
         const audioBlob = new Blob(lastRecording, { type: 'audio/webm' });
         const audioBuffer = await audioCtx.decodeAudioData(await audioBlob.arrayBuffer());
 
+        // 🔊 sequência correta: Beep -> replay.mp3 -> Gravação -> Beep
         await playBeep(TONE_START_FREQ, TONE_DURATION);
+        await playAudioFile("replay.mp3");
         await playBuffer(audioBuffer);
         await playBeep(TONE_END_FREQ, TONE_DURATION);
-    } catch (e) { console.error(e); }
+
+    } catch (e) {
+        console.error(e);
+    }
     isPlaying = false;
 }
 
@@ -363,12 +348,7 @@ function startClockSync() {
         const agora = new Date();
         if (agora.getSeconds() === 0) {
             const config = selectAutoTime.value, min = agora.getMinutes();
-            let trigger = (config==='1M') || 
-                          (config==='5M' && min%5===0) || 
-                          (config==='15M' && min%15===0) || 
-                          (config==='30M' && min%30===0) || 
-                          (config==='1H' && min===0);
-            
+            let trigger = (config==='1M') || (config==='5M' && min%5===0) || (config==='15M' && min%15===0) || (config==='30M' && min%30===0) || (config==='1H' && min===0);
             if (trigger) { 
                 pendingAnnouncement = true;
                 if (!isRecording && !isPlayingPTT && !isPlaying) executarAnuncioDeHora().finally(resetToIdle);
@@ -424,64 +404,40 @@ function updateAudioLabel() {
     }
 }
 
-window.onload = () => { 
-    loadPreferences(); 
-    resetTimerUI(); 
-    forceInitialize(); 
-};
+window.onload = () => { loadPreferences(); resetTimerUI(); forceInitialize(); };
 
 async function forceInitialize() {
     try {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
         dtmfAnalyser = audioCtx.createAnalyser();
         dtmfAnalyser.fftSize = 2048;
         dtmfDataArray = new Float32Array(dtmfAnalyser.fftSize);
         dtmfSource = audioCtx.createMediaStreamSource(micStream);
         dtmfSource.connect(dtmfAnalyser);
-
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 2048;
         dataArray = new Float32Array(analyser.frequencyBinCount);
-        
-        startVUMeter();
-        startContinuousDTMF();
-        startClockSync();
-        
+        startVUMeter(); startContinuousDTMF(); startClockSync();
         isPlaying = true; 
         setStatus('INICIANDO', 'status-playing');
         await playBeep(TONE_START_FREQ, TONE_DURATION);
         try { await playAudioFile('boot.mp3'); } catch(e) {}
         await playBeep(TONE_END_FREQ, TONE_DURATION);
-        
-        isPlaying = false; 
-        isSystemReady = true;
-        resetToIdle();
+        isPlaying = false; isSystemReady = true; resetToIdle();
     } catch (err) { setTimeout(forceInitialize, 2000); }
 }
 
 window.addEventListener('keydown', async (e) => {
     if (!isSystemReady || isPlaying || isPlayingPTT || e.repeat || isRecording || forceWaitRelease) return;
-    if (e.key === 'F7' || e.key === 'F2') { 
-        e.preventDefault(); 
-        activeKey = e.key; 
-        await startRecording(); 
-    }
+    if (e.key === 'F7' || e.key === 'F2') { e.preventDefault(); activeKey = e.key; await startRecording(); }
 });
 
 window.addEventListener('keyup', (e) => {
     if (e.key === activeKey) {
         e.preventDefault();
-        if (forceWaitRelease) { 
-            forceWaitRelease = false; 
-            activeKey = null; 
-            processAndPlayRecording(); 
-        }
-        else if (isRecording) { 
-            activeKey = null; 
-            stopRecording(); 
-        }
+        if (forceWaitRelease) { forceWaitRelease = false; activeKey = null; processAndPlayRecording(); }
+        else if (isRecording) { activeKey = null; stopRecording(); }
     }
 });
 
@@ -502,11 +458,8 @@ function playBeep(freq, dur) {
         gain.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + 0.01);
         gain.gain.setValueAtTime(0.5, audioCtx.currentTime + (dur/1000) - 0.01);
         gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + (dur/1000));
-        osc.connect(gain); 
-        gain.connect(analyser); 
-        analyser.connect(audioCtx.destination);
-        osc.start(); 
-        osc.stop(audioCtx.currentTime + (dur/1000));
+        osc.connect(gain); gain.connect(analyser); analyser.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + (dur/1000));
         setTimeout(resolve, dur + 50);
     });
 }
@@ -520,25 +473,17 @@ async function playAudioFile(file) {
 function playBuffer(buf) {
     return new Promise(res => {
         const src = audioCtx.createBufferSource();
-        src.buffer = buf; 
-        src.connect(analyser); 
-        analyser.connect(audioCtx.destination);
-        src.onended = res; 
-        src.start(0);
+        src.buffer = buf; src.connect(analyser); analyser.connect(audioCtx.destination);
+        src.onended = res; src.start(0);
     });
 }
 
 function startTimer() {
-    timeRemaining = MAX_RECORD_TIME; 
-    timeLabel.innerText = "TEMPO DISPONÍVEL";
+    timeRemaining = MAX_RECORD_TIME; timeLabel.innerText = "TEMPO DISPONÍVEL";
     progressFill.className = 'progress-fill fill-recording';
     recordTimerInterval = setInterval(() => {
         timeRemaining -= 0.1;
-        if (timeRemaining <= 0) { 
-            stopRecording(); 
-            forceWaitRelease = true; 
-            setStatus('ESGOTADO', 'status-recording'); 
-        }
+        if (timeRemaining <= 0) { stopRecording(); forceWaitRelease = true; setStatus('ESGOTADO', 'status-recording'); }
         timeDisplay.innerText = formatTime(Math.max(0, timeRemaining));
         progressFill.style.width = `${(timeRemaining / MAX_RECORD_TIME) * 100}%`;
     }, 100);
@@ -547,8 +492,7 @@ function startTimer() {
 function stopTimer() { clearInterval(recordTimerInterval); }
 
 function startPlaybackTimer(dur) {
-    playbackCurrentTime = 0; 
-    timeLabel.innerText = "REPRODUÇÃO";
+    playbackCurrentTime = 0; timeLabel.innerText = "REPRODUÇÃO";
     progressFill.className = 'progress-fill fill-playing';
     playbackTimerInterval = setInterval(() => {
         playbackCurrentTime += 0.1;
@@ -557,41 +501,29 @@ function startPlaybackTimer(dur) {
     }, 100);
 }
 
-function stopPlaybackTimer() { 
-    clearInterval(playbackTimerInterval); 
-    resetTimerUI(); 
-}
+function stopPlaybackTimer() { clearInterval(playbackTimerInterval); resetTimerUI(); }
 
 function resetTimerUI() {
-    timeLabel.innerText = "TEMPO DISPONÍVEL"; 
-    timeDisplay.innerText = formatTime(MAX_RECORD_TIME);
-    progressFill.className = 'progress-fill fill-ready'; 
-    progressFill.style.width = '100%';
+    timeLabel.innerText = "TEMPO DISPONÍVEL"; timeDisplay.innerText = formatTime(MAX_RECORD_TIME);
+    progressFill.className = 'progress-fill fill-ready'; progressFill.style.width = '100%';
 }
 
 function startVUMeter() {
     function draw() {
-        requestAnimationFrame(draw); 
-        if (!analyser) return;
+        requestAnimationFrame(draw); if (!analyser) return;
         analyser.getFloatTimeDomainData(dataArray);
         let rms = Math.sqrt(dataArray.reduce((acc, val) => acc + val * val, 0) / dataArray.length);
         let percent = Math.max(0, (20 * Math.log10(rms) + 60) / 60) * 100;
         vuBar.style.width = `${Math.min(100, percent)}%`;
-        if (percent > peakValue) { 
-            peakValue = percent; 
-            peakHoldCounter = 30; 
-        } else { 
-            if (peakHoldCounter > 0) peakHoldCounter--; 
-            else peakValue = Math.max(0, peakValue - 1.5); 
-        }
+        if (percent > peakValue) { peakValue = percent; peakHoldCounter = 30; }
+        else { if (peakHoldCounter > 0) peakHoldCounter--; else peakValue = Math.max(0, peakValue - 1.5); }
         vuPeak.style.left = `${Math.min(100, peakValue)}%`;
     } 
     draw();
 }
 
 function loadPreferences() {
-    const s = localStorage.getItem('ptt_autoHora'); 
-    if (s) selectAutoTime.value = s;
+    const s = localStorage.getItem('ptt_autoHora'); if (s) selectAutoTime.value = s;
     customAudioData = localStorage.getItem('ptt_customAudioData');
     customAudioName = localStorage.getItem('ptt_customAudioName');
     updateAudioLabel();
