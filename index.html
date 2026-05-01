@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Z-Link Echo</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main id="app-interface">
+        <header>
+            <h1>Z-Link Echo</h1>
+            
+            <!-- Painel de Status Centralizado -->
+            <div class="status-main-container">
+                <span id="status-indicator" class="status-idle">PRONTO</span>
+            </div>
+            
+            <div class="central-info">
+                <!-- Relógio do Sistema -->
+                <div class="info-block">
+                    <span class="label-small">Horário do Sistema</span>
+                    <div id="clock-display">00:00:00</div>
+                </div>
+
+                <!-- Cronômetro Dinâmico -->
+                <div class="info-block">
+                    <span class="label-small" id="time-label">Tempo Disponível</span>
+                    <div id="time-remaining">02:00</div>
+                </div>
+            </div>
+        </header>
+
+        <section class="display-section">
+            <!-- Barra de Progresso Animada -->
+            <div class="progress-bar-container">
+                <div id="progress-fill" class="progress-fill"></div>
+            </div>
+
+            <!-- VU Meter Estilo Profissional -->
+            <div class="vu-meter-container">
+                <div class="vu-scale">
+                    <span>-60</span><span>-40</span><span>-20</span><span>-10</span><span>0 dB</span>
+                </div>
+                <div class="vu-track">
+                    <div id="vu-bar" class="vu-bar"></div>
+                    <div id="vu-peak" class="vu-peak"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Configurações e Ações -->
+        <section class="controls-section">
+            <div class="control-group">
+                <label for="auto-announce">Anúncio de Hora Automático:</label>
+                <select id="auto-announce">
+                    <option value="OFF">Desligado (OFF)</option>
+                    <option value="1M">A cada 1 Minuto</option>
+                    <option value="5M">A cada 5 Minutos</option>
+                    <option value="15M">A cada 15 Minutos</option>
+                    <option value="30M">A cada 30 Minutos</option>
+                    <option value="1H">A cada Hora Cheia</option>
+                </select>
+            </div>
+
+            <!-- NOVO: Seletor de Áudio Personalizado -->
+            <div class="control-group file-group">
+                <div class="file-group-header">
+                    <label>Áudio da Chamada:</label>
+                    <button id="btn-reset-audio" class="btn-reset" title="Restaurar chamada padrão" style="display: none;">⟲ Padrão</button>
+                </div>
+                <div class="file-input-wrapper">
+                    <input type="file" id="custom-audio-input" accept="audio/*" class="hidden-input">
+                    <button type="button" id="btn-choose-file" class="btn-file">Escolher Arquivo</button>
+                    <span id="custom-audio-label" class="file-label">Usando chamada padrão</span>
+                </div>
+            </div>
+
+            <button id="btn-ouvir-hora" class="btn-action">Ouvir Hora Atual</button>
+        </section>
+
+        <footer>
+            <p>Desenvolvido por Diniz-RF</p>
+        </footer>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
