@@ -10,7 +10,7 @@ let audioCtx, analyser, micStream, mediaRecorder;
 let audioChunks = [];
 let isRecording = false;
 let isPlaying = false;
-let isPlayingPTT = false; // NOVO CONTROLE SEPARADO
+let isPlayingPTT = false; // CONTROLE SEPARADO
 let isSystemReady = false; 
 let forceWaitRelease = false; 
 let activeKey = null;
@@ -87,7 +87,7 @@ async function forceInitialize() {
 
 async function runBootSequence() {
     isPlaying = true;
-    setStatus('INICIALIZANDO...', 'status-playing');
+    setStatus('INICIANDO', 'status-playing');
     await playBeep(TONE_START_FREQ, TONE_DURATION);
     await playAudioFile('boot.mp3'); 
     await playBeep(TONE_END_FREQ, TONE_DURATION);
@@ -97,12 +97,11 @@ async function runBootSequence() {
 }
 
 // ==========================================
-// 🧠 LÓGICA INTELIGENTE (ATUALIZADA)
+// 🧠 LÓGICA INTELIGENTE
 // ==========================================
 function resetIdleTimer() { if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; } }
 
 function checkIdleState(fromPTT = false) {
-    // Agora avalia corretamente usando !isPlayingPTT
     if (pendingAnnouncement && !isRecording && !isPlayingPTT && !forceWaitRelease) {
         resetIdleTimer();
         
@@ -144,12 +143,12 @@ window.addEventListener('keyup', (e) => {
 });
 
 // ==========================================
-// 🎤 CORE: GRAVAÇÃO E REPRODUÇÃO (ATUALIZADO)
+// 🎤 CORE: GRAVAÇÃO E REPRODUÇÃO
 // ==========================================
 async function startRecording() {
     try {
         resetIdleTimer(); isRecording = true; audioChunks = [];
-        setStatus('GRAVANDO...', 'status-recording');
+        setStatus('RECEBENDO', 'status-recording');
         analyser.disconnect();
         let micSource = audioCtx.createMediaStreamSource(micStream);
         micSource.connect(analyser);
@@ -157,7 +156,7 @@ async function startRecording() {
         mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
         mediaRecorder.onstop = () => { micSource.disconnect(); if (!forceWaitRelease) processAndPlayRecording(); };
         mediaRecorder.start(); startTimer();
-    } catch (err) { setStatus('ERRO MIC', 'status-idle'); isRecording = false; }
+    } catch (err) { setStatus('MIC ERRO', 'status-idle'); isRecording = false; }
 }
 
 function stopRecording() { if (mediaRecorder?.state === 'recording') mediaRecorder.stop(); stopTimer(); isRecording = false; }
@@ -165,9 +164,9 @@ function stopRecording() { if (mediaRecorder?.state === 'recording') mediaRecord
 async function processAndPlayRecording() {
     resetIdleTimer(); 
     isPlaying = true; 
-    isPlayingPTT = true; // SINALIZAÇÃO CORRETA PTT ATIVO
+    isPlayingPTT = true; // SINALIZAÇÃO PTT ATIVO
     
-    setStatus('REPRODUZINDO...', 'status-playing');
+    setStatus('REPRODUÇÃO', 'status-playing');
     const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
     const audioBuffer = await audioCtx.decodeAudioData(await audioBlob.arrayBuffer());
     const totalDur = (TONE_DURATION / 1000) * 2 + audioBuffer.duration;
@@ -179,7 +178,7 @@ async function processAndPlayRecording() {
     stopPlaybackTimer(); 
     
     isPlaying = false; 
-    isPlayingPTT = false; // SINALIZAÇÃO CORRETA PTT FINALIZADO
+    isPlayingPTT = false; // SINALIZAÇÃO PTT FINALIZADO
     
     setStatus('PRONTO', 'status-idle'); 
     checkIdleState(true); // FLAG TRUE: Força os 10s de delay
@@ -229,7 +228,7 @@ document.getElementById('btn-ouvir-hora').onclick = () => {
 
 async function executarAnuncioDeHora() {
     pendingAnnouncement = false; // Segurança para o agendamento
-    isPlaying = true; setStatus('ANUNCIANDO...', 'status-playing');
+    isPlaying = true; setStatus('HORA', 'status-playing');
     const agora = new Date();
     const h = agora.getHours().toString().padStart(2, '0'), m = agora.getMinutes().toString().padStart(2, '0');
     await playBeep(TONE_START_FREQ, TONE_DURATION);
@@ -338,7 +337,7 @@ function updateAudioLabel() {
         customAudioLabel.style.color = 'var(--accent-color)';
         btnResetAudio.style.display = 'inline-block';
     } else {
-        customAudioLabel.innerText = "Usando chamada padrão";
+        customAudioLabel.innerText = "USANDO CHAMADA PADRÃO";
         customAudioLabel.style.color = '#aaa';
         btnResetAudio.style.display = 'none';
     }
@@ -352,7 +351,7 @@ function loadPreferences() {
     const savedName = localStorage.getItem('ptt_customAudioName');
     if (savedAudio) { 
         customAudioData = savedAudio; 
-        customAudioName = savedName || 'Chamada personalizada'; 
+        customAudioName = savedName || 'CHAMADA PERSONALIZADA'; 
     }
     updateAudioLabel();
 }
@@ -362,11 +361,11 @@ selectAutoTime.onchange = (e) => localStorage.setItem('ptt_autoHora', e.target.v
 // 📊 UI TIMERS & METERING
 // ==========================================
 function startTimer() {
-    timeRemaining = MAX_RECORD_TIME; timeLabel.innerText = "Tempo Restante";
+    timeRemaining = MAX_RECORD_TIME; timeLabel.innerText = "TEMPO RESTANTE";
     progressFill.className = 'progress-fill fill-recording';
     recordTimerInterval = setInterval(() => {
         timeRemaining -= 0.1;
-        if (timeRemaining <= 0) { stopRecording(); forceWaitRelease = true; setStatus('SOLTE A TECLA', 'status-recording'); }
+        if (timeRemaining <= 0) { stopRecording(); forceWaitRelease = true; setStatus('ESGOTADO', 'status-recording'); }
         timeDisplay.innerText = formatTime(Math.max(0, timeRemaining));
         progressFill.style.width = `${(timeRemaining / MAX_RECORD_TIME) * 100}%`;
     }, 100);
@@ -374,7 +373,7 @@ function startTimer() {
 function stopTimer() { clearInterval(recordTimerInterval); }
 
 function startPlaybackTimer(dur) {
-    playbackCurrentTime = 0; timeLabel.innerText = "Reproduzindo";
+    playbackCurrentTime = 0; timeLabel.innerText = "REPRODUÇÃO";
     progressFill.className = 'progress-fill fill-playing';
     playbackTimerInterval = setInterval(() => {
         playbackCurrentTime += 0.1; if (playbackCurrentTime > dur) playbackCurrentTime = dur;
@@ -385,7 +384,7 @@ function startPlaybackTimer(dur) {
 function stopPlaybackTimer() { clearInterval(playbackTimerInterval); resetTimerUI(); }
 
 function resetTimerUI() {
-    timeLabel.innerText = "Tempo Disponível"; timeDisplay.innerText = formatTime(MAX_RECORD_TIME);
+    timeLabel.innerText = "TEMPO DISPONÍVEL"; timeDisplay.innerText = formatTime(MAX_RECORD_TIME);
     progressFill.className = 'progress-fill fill-ready'; progressFill.style.width = '100%';
 }
 
