@@ -7,7 +7,6 @@
     --idle-color: #444444;
 }
 
-/* Modo App: Bloqueio total de scroll */
 html, body {
     height: 100%;
     margin: 0;
@@ -44,7 +43,6 @@ main {
     overflow: hidden;
 }
 
-/* Título Centralizado e Estilizado */
 h1 { 
     text-align: center;
     font-size: 1.3rem;
@@ -54,7 +52,6 @@ h1 {
     margin-bottom: 15px;
 }
 
-/* Painel de Status */
 .status-main-container {
     height: 80px;
     display: flex;
@@ -98,21 +95,18 @@ h1 {
 
 .label-small { font-size: 0.65rem; color: #888; letter-spacing: 1px; margin-bottom: 2px; }
 
-/* Barra de Progresso */
 .progress-bar-container { width: 100%; height: 6px; background: #000; border-radius: 3px; margin: 15px 0; overflow: hidden; }
 .progress-fill { height: 100%; width: 100%; transition: width 0.1s linear; }
 .fill-ready { background: #333; }
 .fill-recording { background: var(--danger-color); }
 .fill-playing { background: var(--accent-color); }
 
-/* VU Meter */
 .vu-meter-container { background: #0a0a0a; padding: 10px; border-radius: 8px; border: 1px solid #333; }
 .vu-scale { display: flex; justify-content: space-between; font-size: 0.55rem; color: #444; margin-bottom: 4px; }
 .vu-track { width: 100%; height: 15px; background: #111; position: relative; overflow: hidden; }
 .vu-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #00ff00, #ffff00, #ff0000); }
 .vu-peak { width: 2px; height: 100%; background: #fff; position: absolute; left: 0%; transition: left 0.05s linear; }
 
-/* Controles */
 .controls-section { display: flex; flex-direction: column; gap: 10px; }
 .control-group { display: flex; justify-content: space-between; align-items: center; background: #252525; padding: 12px; border-radius: 8px; font-size: 0.8rem; }
 select { background: #000; color: #fff; border: 1px solid #444; padding: 5px; border-radius: 4px; }
@@ -125,5 +119,32 @@ select { background: #000; color: #fff; border: 1px solid #444; padding: 5px; bo
 .btn-file { background: #444; color: #fff; padding: 6px 10px; border-radius: 4px; border: 1px solid #555; cursor: pointer; font-size: 0.75rem; text-transform: uppercase; }
 .btn-reset { background: transparent; color: var(--danger-color); border: 1px solid var(--danger-color); padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; cursor: pointer; }
 .file-label { font-size: 0.75rem; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; text-transform: uppercase; }
+
+.dtmf-result-box {
+    margin-top: 10px;
+    padding: 10px;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 8px;
+    text-align: center;
+}
+
+#dtmf-result {
+    font-size: 1rem;
+    color: #00ff88;
+    margin-top: 5px;
+    font-weight: bold;
+    min-height: 1.2em;
+}
+
+.dtmf-debug {
+    margin-top: 10px;
+    font-size: 0.7rem;
+    color: #ccc;
+    background: #000;
+    padding: 8px;
+    border: 1px solid #333;
+    border-radius: 6px;
+}
 
 footer { border-top: 1px solid #333; padding-top: 10px; font-size: 0.7rem; color: #555; font-weight: bold; text-align: center; }
