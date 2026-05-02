@@ -8,6 +8,7 @@ const TONE_END_FREQ = 17500;
 const TONE_DURATION = 100;
 
 let dtmfCommand = null; 
+let dtmfAudioFile = null; // Variável adicionada para salvar o arquivo de áudio auto
 let lastRecording = null; 
 
 let audioCtx, analyser, micStream, mediaRecorder;
@@ -37,6 +38,8 @@ let dtmfSequence = "";
 let lastDetectedKey = null;
 let lastKeyTime = 0;
 const MIN_GAP = 80; 
+
+let toneActive = false; // Controle de estado real do tom
 
 let lastToneTime = 0;
 const RELEASE_TIMEOUT = 120;
@@ -162,6 +165,7 @@ function processDTMFFrame(buffer, sampleRate) {
     dbgCol.innerText = Math.round(maxColMag);
 
     if (rowIdx !== -1 && colIdx !== -1 && maxRowMag > 10000 && maxColMag > 10000) {
+        toneActive = true;
         let currentKey = keypad[rowIdx][colIdx];
         dbgKey.innerText = currentKey;
         
@@ -187,7 +191,9 @@ function processDTMFFrame(buffer, sampleRate) {
             dtmfSequence += stableKey;
             dtmfSequence = dtmfSequence.replace(/[^0-9]/g, '');
 
-            if (dtmfSequence.length > 10) dtmfSequence = dtmfSequence.slice(-10);
+            if (dtmfSequence.length > 10) {
+                dtmfSequence = dtmfSequence.slice(-10);
+            }
 
             dbgSeq.innerText = dtmfSequence;
 
@@ -200,11 +206,56 @@ function processDTMFFrame(buffer, sampleRate) {
                 dtmfResult.innerText = "HORA IDENTIFICADA";
                 dtmfCommand = "HORA";
             }
+
+            // NOVOS COMANDOS DTMF PARA AUTO-ANÚNCIO
+            if (dtmfSequence.endsWith("0000")) {
+                dtmfResult.innerText = "AUTO OFF";
+                dtmfCommand = "AUTO";
+                dtmfAudioFile = "0000.mp3";
+                selectAutoTime.value = "OFF";
+                localStorage.setItem('ptt_autoHora', "OFF");
+            }
+            if (dtmfSequence.endsWith("0001")) {
+                dtmfResult.innerText = "AUTO 1 MIN";
+                dtmfCommand = "AUTO";
+                dtmfAudioFile = "0001.mp3";
+                selectAutoTime.value = "1M";
+                localStorage.setItem('ptt_autoHora', "1M");
+            }
+            if (dtmfSequence.endsWith("0005")) {
+                dtmfResult.innerText = "AUTO 5 MIN";
+                dtmfCommand = "AUTO";
+                dtmfAudioFile = "0005.mp3";
+                selectAutoTime.value = "5M";
+                localStorage.setItem('ptt_autoHora', "5M");
+            }
+            if (dtmfSequence.endsWith("0015")) {
+                dtmfResult.innerText = "AUTO 15 MIN";
+                dtmfCommand = "AUTO";
+                dtmfAudioFile = "0015.mp3";
+                selectAutoTime.value = "15M";
+                localStorage.setItem('ptt_autoHora', "15M");
+            }
+            if (dtmfSequence.endsWith("0030")) {
+                dtmfResult.innerText = "AUTO 30 MIN";
+                dtmfCommand = "AUTO";
+                dtmfAudioFile = "0030.mp3";
+                selectAutoTime.value = "30M";
+                localStorage.setItem('ptt_autoHora', "30M");
+            }
+            if (dtmfSequence.endsWith("0060")) {
+                dtmfResult.innerText = "AUTO HORA CHEIA";
+                dtmfCommand = "AUTO";
+                dtmfAudioFile = "0060.mp3";
+                selectAutoTime.value = "1H";
+                localStorage.setItem('ptt_autoHora', "1H");
+            }
         }
     } else {
         dbgKey.innerText = "-";
-        const now = performance.now();
-        if (lastDetectedKey !== null && (now - lastToneTime > RELEASE_TIMEOUT)) {
+        toneActive = false;
+
+        if (!toneActive && lastDetectedKey !== null) {
             lastDetectedKey = null;
             stableKey = null;
             stableCount = 0;
@@ -244,6 +295,7 @@ async function startRecording() {
                 timeRemaining = MAX_RECORD_TIME;
                 if (dtmfCommand === "REPLAY") executarReplay().finally(resetToIdle);
                 if (dtmfCommand === "HORA") executarAnuncioDeHora().finally(resetToIdle);
+                if (dtmfCommand === "AUTO") executarAutoConfirmacao(dtmfAudioFile).finally(resetToIdle);
                 dtmfCommand = null;
                 return;
             }
@@ -284,7 +336,7 @@ async function processAndPlayRecording() {
 }
 
 // ==========================================
-// ⏰ SISTEMA DE HORA E REPLAY
+// ⏰ SISTEMA DE HORA, REPLAY E AUTO CONFIRMAÇÃO
 // ==========================================
 async function executarAnuncioDeHora() {
     if (audioCtx.state === 'suspended') await audioCtx.resume();
@@ -315,7 +367,6 @@ async function executarAnuncioDeHora() {
     isPlaying = false; 
 }
 
-// 🎯 ATUALIZADO: Sequência de REPLAY corrigida
 async function executarReplay() {
     if (isPlaying) return;
     isPlaying = true;
@@ -330,7 +381,6 @@ async function executarReplay() {
         const audioBlob = new Blob(lastRecording, { type: 'audio/webm' });
         const audioBuffer = await audioCtx.decodeAudioData(await audioBlob.arrayBuffer());
 
-        // 🔊 sequência correta: Beep -> replay.mp3 -> Gravação -> Beep
         await playBeep(TONE_START_FREQ, TONE_DURATION);
         await playAudioFile("replay.mp3");
         await playBuffer(audioBuffer);
@@ -339,6 +389,23 @@ async function executarReplay() {
     } catch (e) {
         console.error(e);
     }
+    isPlaying = false;
+}
+
+// Função adicionada para executar confirmação de auto-anúncio
+async function executarAutoConfirmacao(file) {
+    if (isPlaying) return;
+    isPlaying = true;
+    setStatus('CONFIRMAÇÃO', 'status-playing');
+    
+    try {
+        await playBeep(TONE_START_FREQ, TONE_DURATION);
+        await playAudioFile(file);
+        await playBeep(TONE_END_FREQ, TONE_DURATION);
+    } catch (e) {
+        console.error("Erro ao tocar arquivo de confirmação: ", e);
+    }
+    
     isPlaying = false;
 }
 
