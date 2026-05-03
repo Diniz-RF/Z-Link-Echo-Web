@@ -294,7 +294,7 @@ async function startRecording() {
                 timeRemaining = MAX_RECORD_TIME;
 
                 if (dtmfCommand === "REPLAY") executarReplay().finally(resetToIdle);
-                if (dtmfCommand === "HORA") executarAnuncioDeHora().finally(resetToIdle);
+                if (dtmfCommand === "HORA") executarAnuncioDeHoraDTMF().finally(resetToIdle);
                 if (dtmfCommand === "AUTO") executarAutoConfirmacao(dtmfAudioFile).finally(resetToIdle);
 
                 if (dtmfCommand === "ECHO_OFF") {
@@ -412,6 +412,42 @@ async function executarAnuncioDeHora() {
     await playBeep(TONE_END_FREQ, TONE_DURATION);
     
     isPlaying = false; 
+}
+
+async function executarAnuncioDeHoraDTMF() {
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+    pendingAnnouncement = false;
+
+    isPlaying = true;
+    setStatus('HORA', 'status-playing');
+
+    const agora = new Date();
+    const hora = agora.getHours();
+
+    let saudacao = "";
+
+    if (hora >= 0 && hora <= 11) {
+        saudacao = "dia.mp3";
+    } else if (hora >= 12 && hora <= 17) {
+        saudacao = "tarde.mp3";
+    } else {
+        saudacao = "noite.mp3";
+    }
+
+    const h = hora.toString().padStart(2, '0');
+    const m = agora.getMinutes().toString().padStart(2, '0');
+
+    await playBeep(TONE_START_FREQ, TONE_DURATION);
+
+    // 🔥 NOVO: áudio por período
+    await playAudioFile(saudacao);
+
+    await playAudioFile(`${h}h.mp3`);
+    await playAudioFile(`${m}m.mp3`);
+
+    await playBeep(TONE_END_FREQ, TONE_DURATION);
+
+    isPlaying = false;
 }
 
 async function executarReplay() {
