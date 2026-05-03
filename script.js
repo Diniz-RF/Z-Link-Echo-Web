@@ -33,9 +33,10 @@ let customAudioData = null;
 let customAudioName = null;
 
 // ==========================================
-// 🧠 VARIÁVEIS DTMF (ATUALIZADO)
+// 🧠 VARIÁVEIS DTMF (ATUALIZADO - LOCK)
 // ==========================================
 let dtmfSequence = "";
+let dtmfLocked = false; // NOVA TRAVA DE ESTADO
 let lastDetectedKey = null;
 let lastKeyTime = 0;
 
@@ -75,10 +76,12 @@ function formatTime(totalSeconds) {
     return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+// RESET DTMF (ATUALIZADO COM LOCK)
 function resetDTMFUI() {
     dtmfResult.innerText = "AGUARDANDO";
     dtmfSequence = "";
     dbgSeq.innerText = "";
+    dtmfLocked = false; // LIBERA O LOCK
 }
 
 function resetToIdle() {
@@ -120,13 +123,13 @@ function checkIdleState(isFromPTT = false) {
 }
 
 // ==========================================
-// 🎛️ DETECÇÃO DTMF (PARTE 1 E 2 ATUALIZADAS)
+// 🎛️ DETECÇÃO DTMF (ATUALIZADO COM LOCK)
 // ==========================================
 function processDTMFFrame(buffer, sampleRate) {
     if (!sampleRate) return null;
 
     const rows = [697, 770, 852, 941];
-    const cols = [1209, 1336, 1477]; // REMOVIDO 1633 (A, B, C, D)
+    const cols = [1209, 1336, 1477];
     const keypad = [
         ['1','2','3'],
         ['4','5','6'],
@@ -164,12 +167,10 @@ function processDTMFFrame(buffer, sampleRate) {
     dbgRow.innerText = Math.round(maxRowMag);
     dbgCol.innerText = Math.round(maxColMag);
 
-    // Validação de Intensidade
     if (rowIdx !== -1 && colIdx !== -1 && maxRowMag > 10000 && maxColMag > 10000) {
         toneActive = true;
         let currentKey = keypad[rowIdx][colIdx];
         
-        // FILTRO DE TECLAS ADICIONAL
         if (!/^[0-9*#]$/.test(currentKey)) {
             dbgKey.innerText = "BLOQ";
             return null;
@@ -184,34 +185,34 @@ function processDTMFFrame(buffer, sampleRate) {
             stableCount = 1;
         }
 
-        // LÓGICA DE SEQUÊNCIA POR TRANSIÇÃO (PARTE 2)
-        if (stableCount >= STABLE_MIN) {
+        // APLICAÇÃO DO FILTRO DE LOCK NA DETECÇÃO (CRÍTICO)
+        if (stableCount >= STABLE_MIN && !dtmfLocked) {
             if (stableKey !== null && lastDetectedKey === null) {
                 lastDetectedKey = stableKey;
                 lastKeyTime = performance.now();
 
-                dtmfSequence += stableKey;
-
-                // Manter apenas números para comandos
-                dtmfSequence = dtmfSequence.replace(/[^0-9]/g, '');
-
-                // Limitar buffer
-                if (dtmfSequence.length > 10) {
-                    dtmfSequence = dtmfSequence.slice(-10);
+                // PROTEÇÃO DE INSERÇÃO NA SEQUÊNCIA
+                if (!dtmfLocked) {
+                    dtmfSequence += stableKey;
+                    dtmfSequence = dtmfSequence.replace(/[^0-9]/g, '');
+                    if (dtmfSequence.length > 10) {
+                        dtmfSequence = dtmfSequence.slice(-10);
+                    }
+                    dbgSeq.innerText = dtmfSequence;
                 }
 
-                dbgSeq.innerText = dtmfSequence;
-
-                // Comandos
+                // COMANDOS COM ATIVAÇÃO DE LOCK
                 if (dtmfSequence.endsWith("737529")) {
                     dtmfResult.innerText = "REPLAY IDENTIFICADO";
                     dtmfCommand = "REPLAY";
+                    dtmfLocked = true; // ATIVA LOCK
                 }
                 if (dtmfSequence.endsWith("4672")) {
                     dtmfResult.innerText = "HORA IDENTIFICADA";
                     dtmfCommand = "HORA";
+                    dtmfLocked = true; // ATIVA LOCK
                 }
-                // Comandos AUTO
+                
                 const autoMap = {
                     "0000": { label: "AUTO OFF", val: "OFF" },
                     "0001": { label: "AUTO 1 MIN", val: "1M" },
@@ -225,6 +226,7 @@ function processDTMFFrame(buffer, sampleRate) {
                     if (dtmfSequence.endsWith(code)) {
                         dtmfResult.innerText = autoMap[code].label;
                         dtmfCommand = "AUTO";
+                        dtmfLocked = true; // ATIVA LOCK
                         dtmfAudioFile = `${code}.mp3`;
                         selectAutoTime.value = autoMap[code].val;
                         localStorage.setItem('ptt_autoHora', autoMap[code].val);
@@ -235,8 +237,6 @@ function processDTMFFrame(buffer, sampleRate) {
     } else {
         dbgKey.innerText = "-";
         toneActive = false;
-        
-        // RESET CORRETO (Transição para silêncio)
         if (!toneActive) {
             lastDetectedKey = null;
             stableKey = null;
@@ -500,7 +500,7 @@ window.addEventListener('keyup', (e) => {
                 activeKey = null;
                 stopRecording();
             }
-        }, 400); // Delay p/ rádio real
+        }, 400);
     }
 });
 
