@@ -8,7 +8,7 @@ const TONE_END_FREQ = 17500;
 const TONE_DURATION = 100;
 
 let dtmfCommand = null; 
-let dtmfAudioFile = null; // Variável adicionada para salvar o arquivo de áudio auto
+let dtmfAudioFile = null;
 let lastRecording = null; 
 
 let audioCtx, analyser, micStream, mediaRecorder;
@@ -20,6 +20,7 @@ let isPlayingPTT = false;
 let isSystemReady = false; 
 let forceWaitRelease = false; 
 let activeKey = null;
+let pttReleaseTimer = null; 
 
 let recordTimerInterval, playbackTimerInterval;
 let timeRemaining = MAX_RECORD_TIME;
@@ -32,17 +33,14 @@ let customAudioData = null;
 let customAudioName = null;
 
 // ==========================================
-// 🧠 VARIÁVEIS DTMF
+// 🧠 VARIÁVEIS DTMF (ATUALIZADO)
 // ==========================================
 let dtmfSequence = "";
 let lastDetectedKey = null;
 let lastKeyTime = 0;
-const MIN_GAP = 80; 
 
-let toneActive = false; // Controle de estado real do tom
-
-let lastToneTime = 0;
-const RELEASE_TIMEOUT = 120;
+let toneActive = false; 
+const RELEASE_TIMEOUT = 100; 
 
 let stableKey = null;
 let stableCount = 0;
@@ -100,9 +98,6 @@ function setStatus(txt, cls) {
     statusIndicator.className = cls; 
 }
 
-// ==========================================
-// 🧠 LÓGICA DE DELAY
-// ==========================================
 function resetIdleTimer() { 
     if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; } 
 }
@@ -125,14 +120,19 @@ function checkIdleState(isFromPTT = false) {
 }
 
 // ==========================================
-// 🎛️ DETECÇÃO DTMF
+// 🎛️ DETECÇÃO DTMF (PARTE 1 E 2 ATUALIZADAS)
 // ==========================================
 function processDTMFFrame(buffer, sampleRate) {
     if (!sampleRate) return null;
 
     const rows = [697, 770, 852, 941];
-    const cols = [1209, 1336, 1477, 1633];
-    const keypad = [['1','2','3','A'],['4','5','6','B'],['7','8','9','C'],['*','0','#','D']];
+    const cols = [1209, 1336, 1477]; // REMOVIDO 1633 (A, B, C, D)
+    const keypad = [
+        ['1','2','3'],
+        ['4','5','6'],
+        ['7','8','9'],
+        ['*','0','#']
+    ];
 
     function getGoertzelMag(freq) {
         const k = Math.floor(0.5 + (buffer.length * freq) / sampleRate);
@@ -164,14 +164,18 @@ function processDTMFFrame(buffer, sampleRate) {
     dbgRow.innerText = Math.round(maxRowMag);
     dbgCol.innerText = Math.round(maxColMag);
 
+    // Validação de Intensidade
     if (rowIdx !== -1 && colIdx !== -1 && maxRowMag > 10000 && maxColMag > 10000) {
         toneActive = true;
         let currentKey = keypad[rowIdx][colIdx];
-        dbgKey.innerText = currentKey;
         
-        lastToneTime = performance.now();
+        // FILTRO DE TECLAS ADICIONAL
+        if (!/^[0-9*#]$/.test(currentKey)) {
+            dbgKey.innerText = "BLOQ";
+            return null;
+        }
 
-        if (currentKey === '#') return null;
+        dbgKey.innerText = currentKey;
 
         if (currentKey === stableKey) {
             stableCount++;
@@ -180,82 +184,60 @@ function processDTMFFrame(buffer, sampleRate) {
             stableCount = 1;
         }
 
-        if (stableCount < STABLE_MIN) return null;
+        // LÓGICA DE SEQUÊNCIA POR TRANSIÇÃO (PARTE 2)
+        if (stableCount >= STABLE_MIN) {
+            if (stableKey !== null && lastDetectedKey === null) {
+                lastDetectedKey = stableKey;
+                lastKeyTime = performance.now();
 
-        const now = performance.now();
+                dtmfSequence += stableKey;
 
-        if (stableKey !== lastDetectedKey) {
-            lastDetectedKey = stableKey;
-            lastKeyTime = now;
+                // Manter apenas números para comandos
+                dtmfSequence = dtmfSequence.replace(/[^0-9]/g, '');
 
-            dtmfSequence += stableKey;
-            dtmfSequence = dtmfSequence.replace(/[^0-9]/g, '');
+                // Limitar buffer
+                if (dtmfSequence.length > 10) {
+                    dtmfSequence = dtmfSequence.slice(-10);
+                }
 
-            if (dtmfSequence.length > 10) {
-                dtmfSequence = dtmfSequence.slice(-10);
-            }
+                dbgSeq.innerText = dtmfSequence;
 
-            dbgSeq.innerText = dtmfSequence;
+                // Comandos
+                if (dtmfSequence.endsWith("737529")) {
+                    dtmfResult.innerText = "REPLAY IDENTIFICADO";
+                    dtmfCommand = "REPLAY";
+                }
+                if (dtmfSequence.endsWith("4672")) {
+                    dtmfResult.innerText = "HORA IDENTIFICADA";
+                    dtmfCommand = "HORA";
+                }
+                // Comandos AUTO
+                const autoMap = {
+                    "0000": { label: "AUTO OFF", val: "OFF" },
+                    "0001": { label: "AUTO 1 MIN", val: "1M" },
+                    "0005": { label: "AUTO 5 MIN", val: "5M" },
+                    "0015": { label: "AUTO 15 MIN", val: "15M" },
+                    "0030": { label: "AUTO 30 MIN", val: "30M" },
+                    "0060": { label: "AUTO HORA CHEIA", val: "1H" }
+                };
 
-            if (dtmfSequence.endsWith("737529")) {
-                dtmfResult.innerText = "REPLAY IDENTIFICADO";
-                dtmfCommand = "REPLAY";
-            }
-
-            if (dtmfSequence.endsWith("4672")) {
-                dtmfResult.innerText = "HORA IDENTIFICADA";
-                dtmfCommand = "HORA";
-            }
-
-            // NOVOS COMANDOS DTMF PARA AUTO-ANÚNCIO
-            if (dtmfSequence.endsWith("0000")) {
-                dtmfResult.innerText = "AUTO OFF";
-                dtmfCommand = "AUTO";
-                dtmfAudioFile = "0000.mp3";
-                selectAutoTime.value = "OFF";
-                localStorage.setItem('ptt_autoHora', "OFF");
-            }
-            if (dtmfSequence.endsWith("0001")) {
-                dtmfResult.innerText = "AUTO 1 MIN";
-                dtmfCommand = "AUTO";
-                dtmfAudioFile = "0001.mp3";
-                selectAutoTime.value = "1M";
-                localStorage.setItem('ptt_autoHora', "1M");
-            }
-            if (dtmfSequence.endsWith("0005")) {
-                dtmfResult.innerText = "AUTO 5 MIN";
-                dtmfCommand = "AUTO";
-                dtmfAudioFile = "0005.mp3";
-                selectAutoTime.value = "5M";
-                localStorage.setItem('ptt_autoHora', "5M");
-            }
-            if (dtmfSequence.endsWith("0015")) {
-                dtmfResult.innerText = "AUTO 15 MIN";
-                dtmfCommand = "AUTO";
-                dtmfAudioFile = "0015.mp3";
-                selectAutoTime.value = "15M";
-                localStorage.setItem('ptt_autoHora', "15M");
-            }
-            if (dtmfSequence.endsWith("0030")) {
-                dtmfResult.innerText = "AUTO 30 MIN";
-                dtmfCommand = "AUTO";
-                dtmfAudioFile = "0030.mp3";
-                selectAutoTime.value = "30M";
-                localStorage.setItem('ptt_autoHora', "30M");
-            }
-            if (dtmfSequence.endsWith("0060")) {
-                dtmfResult.innerText = "AUTO HORA CHEIA";
-                dtmfCommand = "AUTO";
-                dtmfAudioFile = "0060.mp3";
-                selectAutoTime.value = "1H";
-                localStorage.setItem('ptt_autoHora', "1H");
+                for (let code in autoMap) {
+                    if (dtmfSequence.endsWith(code)) {
+                        dtmfResult.innerText = autoMap[code].label;
+                        dtmfCommand = "AUTO";
+                        dtmfAudioFile = `${code}.mp3`;
+                        selectAutoTime.value = autoMap[code].val;
+                        localStorage.setItem('ptt_autoHora', autoMap[code].val);
+                    }
+                }
             }
         }
     } else {
         dbgKey.innerText = "-";
         toneActive = false;
-
-        if (!toneActive && lastDetectedKey !== null) {
+        
+        // RESET CORRETO (Transição para silêncio)
+        if (!toneActive) {
             lastDetectedKey = null;
             stableKey = null;
             stableCount = 0;
@@ -392,7 +374,6 @@ async function executarReplay() {
     isPlaying = false;
 }
 
-// Função adicionada para executar confirmação de auto-anúncio
 async function executarAutoConfirmacao(file) {
     if (isPlaying) return;
     isPlaying = true;
@@ -496,6 +477,10 @@ async function forceInitialize() {
 }
 
 window.addEventListener('keydown', async (e) => {
+    if (pttReleaseTimer) {
+        clearTimeout(pttReleaseTimer);
+        pttReleaseTimer = null;
+    }
     if (!isSystemReady || isPlaying || isPlayingPTT || e.repeat || isRecording || forceWaitRelease) return;
     if (e.key === 'F7' || e.key === 'F2') { e.preventDefault(); activeKey = e.key; await startRecording(); }
 });
@@ -503,8 +488,19 @@ window.addEventListener('keydown', async (e) => {
 window.addEventListener('keyup', (e) => {
     if (e.key === activeKey) {
         e.preventDefault();
-        if (forceWaitRelease) { forceWaitRelease = false; activeKey = null; processAndPlayRecording(); }
-        else if (isRecording) { activeKey = null; stopRecording(); }
+        if (pttReleaseTimer) clearTimeout(pttReleaseTimer);
+
+        pttReleaseTimer = setTimeout(() => {
+            if (forceWaitRelease) {
+                forceWaitRelease = false;
+                activeKey = null;
+                processAndPlayRecording();
+            } 
+            else if (isRecording) {
+                activeKey = null;
+                stopRecording();
+            }
+        }, 400); // Delay p/ rádio real
     }
 });
 
