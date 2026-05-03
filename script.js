@@ -10,6 +10,7 @@ const TONE_DURATION = 100;
 let dtmfCommand = null; 
 let dtmfAudioFile = null;
 let lastRecording = null; 
+let echoEnabled = true;
 
 let audioCtx, analyser, micStream, mediaRecorder;
 let micSourceGlobal, dtmfSource;
@@ -36,7 +37,7 @@ let customAudioName = null;
 // 🧠 VARIÁVEIS DTMF (ATUALIZADO - LOCK)
 // ==========================================
 let dtmfSequence = "";
-let dtmfLocked = false; // NOVA TRAVA DE ESTADO
+let dtmfLocked = false;
 let lastDetectedKey = null;
 let lastKeyTime = 0;
 
@@ -76,12 +77,11 @@ function formatTime(totalSeconds) {
     return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-// RESET DTMF (ATUALIZADO COM LOCK)
 function resetDTMFUI() {
     dtmfResult.innerText = "AGUARDANDO";
     dtmfSequence = "";
     dbgSeq.innerText = "";
-    dtmfLocked = false; // LIBERA O LOCK
+    dtmfLocked = false;
 }
 
 function resetToIdle() {
@@ -123,7 +123,7 @@ function checkIdleState(isFromPTT = false) {
 }
 
 // ==========================================
-// 🎛️ DETECÇÃO DTMF (ATUALIZADO COM LOCK)
+// 🎛️ DETECÇÃO DTMF
 // ==========================================
 function processDTMFFrame(buffer, sampleRate) {
     if (!sampleRate) return null;
@@ -185,13 +185,11 @@ function processDTMFFrame(buffer, sampleRate) {
             stableCount = 1;
         }
 
-        // APLICAÇÃO DO FILTRO DE LOCK NA DETECÇÃO (CRÍTICO)
         if (stableCount >= STABLE_MIN && !dtmfLocked) {
             if (stableKey !== null && lastDetectedKey === null) {
                 lastDetectedKey = stableKey;
                 lastKeyTime = performance.now();
 
-                // PROTEÇÃO DE INSERÇÃO NA SEQUÊNCIA
                 if (!dtmfLocked) {
                     dtmfSequence += stableKey;
                     dtmfSequence = dtmfSequence.replace(/[^0-9]/g, '');
@@ -201,16 +199,28 @@ function processDTMFFrame(buffer, sampleRate) {
                     dbgSeq.innerText = dtmfSequence;
                 }
 
-                // COMANDOS COM ATIVAÇÃO DE LOCK
-                if (dtmfSequence.endsWith("737529")) {
+                if (dtmfSequence.endsWith("7375")) {
                     dtmfResult.innerText = "REPLAY IDENTIFICADO";
                     dtmfCommand = "REPLAY";
-                    dtmfLocked = true; // ATIVA LOCK
+                    dtmfLocked = true;
                 }
                 if (dtmfSequence.endsWith("4672")) {
                     dtmfResult.innerText = "HORA IDENTIFICADA";
                     dtmfCommand = "HORA";
-                    dtmfLocked = true; // ATIVA LOCK
+                    dtmfLocked = true;
+                }
+                
+                // ECHO OFF
+                if (dtmfSequence.endsWith("3263")) {
+                    dtmfResult.innerText = "ECHO DESATIVADO";
+                    dtmfCommand = "ECHO_OFF";
+                    dtmfLocked = true;
+                }
+                // ECHO ON
+                if (dtmfSequence.endsWith("3266")) {
+                    dtmfResult.innerText = "ECHO ATIVADO";
+                    dtmfCommand = "ECHO_ON";
+                    dtmfLocked = true;
                 }
                 
                 const autoMap = {
@@ -226,7 +236,7 @@ function processDTMFFrame(buffer, sampleRate) {
                     if (dtmfSequence.endsWith(code)) {
                         dtmfResult.innerText = autoMap[code].label;
                         dtmfCommand = "AUTO";
-                        dtmfLocked = true; // ATIVA LOCK
+                        dtmfLocked = true;
                         dtmfAudioFile = `${code}.mp3`;
                         selectAutoTime.value = autoMap[code].val;
                         localStorage.setItem('ptt_autoHora', autoMap[code].val);
@@ -275,9 +285,20 @@ async function startRecording() {
                 audioChunks = [];
                 resetTimerUI();
                 timeRemaining = MAX_RECORD_TIME;
+                
                 if (dtmfCommand === "REPLAY") executarReplay().finally(resetToIdle);
                 if (dtmfCommand === "HORA") executarAnuncioDeHora().finally(resetToIdle);
                 if (dtmfCommand === "AUTO") executarAutoConfirmacao(dtmfAudioFile).finally(resetToIdle);
+                
+                if (dtmfCommand === "ECHO_OFF") {
+                    echoEnabled = false;
+                    executarEchoOff().finally(resetToIdle);
+                }
+                if (dtmfCommand === "ECHO_ON") {
+                    echoEnabled = true;
+                    executarEchoOn().finally(resetToIdle);
+                }
+                
                 dtmfCommand = null;
                 return;
             }
@@ -298,6 +319,14 @@ function stopRecording() {
 }
 
 async function processAndPlayRecording() {
+    if (!echoEnabled) {
+        isPlayingPTT = false;
+        isPlaying = false;
+        resetToIdle();
+        checkIdleState(true);
+        return;
+    }
+
     isPlaying = true; isPlayingPTT = true; 
     setStatus('REPRODUÇÃO', 'status-playing');
     lastRecording = audioChunks.slice();
@@ -318,8 +347,28 @@ async function processAndPlayRecording() {
 }
 
 // ==========================================
-// ⏰ SISTEMA DE HORA, REPLAY E AUTO CONFIRMAÇÃO
+// ⏰ SISTEMA DE HORA, REPLAY, AUTO E ECHO
 // ==========================================
+async function executarEchoOff() {
+    if (isPlaying) return;
+    isPlaying = true;
+    setStatus('ECHO OFF', 'status-playing');
+    await playBeep(TONE_START_FREQ, TONE_DURATION);
+    await playAudioFile("echo_off.mp3");
+    await playBeep(TONE_END_FREQ, TONE_DURATION);
+    isPlaying = false;
+}
+
+async function executarEchoOn() {
+    if (isPlaying) return;
+    isPlaying = true;
+    setStatus('ECHO ON', 'status-playing');
+    await playBeep(TONE_START_FREQ, TONE_DURATION);
+    await playAudioFile("echo_on.mp3");
+    await playBeep(TONE_END_FREQ, TONE_DURATION);
+    isPlaying = false;
+}
+
 async function executarAnuncioDeHora() {
     if (audioCtx.state === 'suspended') await audioCtx.resume();
     pendingAnnouncement = false; isPlaying = true;
