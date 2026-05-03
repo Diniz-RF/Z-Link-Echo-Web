@@ -279,31 +279,48 @@ async function startRecording() {
         recSource.connect(analyser);
         mediaRecorder = new MediaRecorder(micStream);
         mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+        
         mediaRecorder.onstop = () => {
             recSource.disconnect();
+
+            // ========================
+            // 🎯 CASO TENHA COMANDO DTMF
+            // ========================
             if (dtmfCommand !== null) {
+                // NÃO salvar gravação
                 audioChunks = [];
+
                 resetTimerUI();
                 timeRemaining = MAX_RECORD_TIME;
-                
+
                 if (dtmfCommand === "REPLAY") executarReplay().finally(resetToIdle);
                 if (dtmfCommand === "HORA") executarAnuncioDeHora().finally(resetToIdle);
                 if (dtmfCommand === "AUTO") executarAutoConfirmacao(dtmfAudioFile).finally(resetToIdle);
-                
+
                 if (dtmfCommand === "ECHO_OFF") {
                     echoEnabled = false;
                     executarEchoOff().finally(resetToIdle);
                 }
+
                 if (dtmfCommand === "ECHO_ON") {
                     echoEnabled = true;
                     executarEchoOn().finally(resetToIdle);
                 }
-                
+
                 dtmfCommand = null;
                 return;
             }
-            if (!forceWaitRelease) processAndPlayRecording();
+
+            // ========================
+            // 🎯 CASO NORMAL (SEM DTMF)
+            // ========================
+            if (audioChunks.length > 0) {
+                lastRecording = audioChunks.slice();
+            }
+
+            processAndPlayRecording();
         };
+
         mediaRecorder.start(); 
         startTimer();
     } catch (err) { 
@@ -329,7 +346,6 @@ async function processAndPlayRecording() {
 
     isPlaying = true; isPlayingPTT = true; 
     setStatus('REPRODUÇÃO', 'status-playing');
-    lastRecording = audioChunks.slice();
     
     try {
         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
