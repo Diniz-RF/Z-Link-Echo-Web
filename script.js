@@ -167,7 +167,36 @@ function processDTMFFrame(buffer, sampleRate) {
     dbgRow.innerText = Math.round(maxRowMag);
     dbgCol.innerText = Math.round(maxColMag);
 
-    if (rowIdx !== -1 && colIdx !== -1 && maxRowMag > 10000 && maxColMag > 10000) {
+    // 🔥 NOVA VALIDAÇÃO PROFISSIONAL
+    const MIN_LEVEL = 3000;
+    const DOMINANCE = 2.0;
+
+    // calcular segunda maior frequência (ROW)
+    let secondRowMag = 0;
+    for (let i = 0; i < rows.length; i++) {
+        if (i !== rowIdx) {
+            const mag = getGoertzelMag(rows[i]);
+            if (mag > secondRowMag) secondRowMag = mag;
+        }
+    }
+
+    // calcular segunda maior frequência (COL)
+    let secondColMag = 0;
+    for (let i = 0; i < cols.length; i++) {
+        if (i !== colIdx) {
+            const mag = getGoertzelMag(cols[i]);
+            if (mag > secondColMag) secondColMag = mag;
+        }
+    }
+
+    if (
+        rowIdx !== -1 &&
+        colIdx !== -1 &&
+        maxRowMag > MIN_LEVEL &&
+        maxColMag > MIN_LEVEL &&
+        maxRowMag > secondRowMag * DOMINANCE &&
+        maxColMag > secondColMag * DOMINANCE
+    ) {
         toneActive = true;
         let currentKey = keypad[rowIdx][colIdx];
         
