@@ -33,6 +33,12 @@ let pendingAnnouncement = false, idleTimer = null;
 let customAudioData = null;
 let customAudioName = null;
 
+let waitingTimeConfig = false;
+let timeConfigTimeout = null;
+let timeConfigSequence = "";
+let appStartTime = Date.now();
+let virtualBaseTime = Date.now();
+
 // ==========================================
 // 🧠 VARIÁVEIS DTMF (ATUALIZADO - LOCK)
 // ==========================================
@@ -68,6 +74,11 @@ const customAudioLabel = document.getElementById('custom-audio-label');
 const btnChooseFile = document.getElementById('btn-choose-file');
 const btnResetAudio = document.getElementById('btn-reset-audio');
 
+function getVirtualDate() {
+    const elapsed = Date.now() - appStartTime;
+    return new Date(virtualBaseTime + elapsed);
+}
+
 // ==========================================
 // 🕒 RELÓGIO E AUXILIARES DE RESET
 // ==========================================
@@ -90,7 +101,7 @@ function resetToIdle() {
 }
 
 setInterval(() => {
-    const agora = new Date();
+    const agora = getVirtualDate();
     clockDisplay.innerText = agora.getHours().toString().padStart(2, '0') + ':' + 
                              agora.getMinutes().toString().padStart(2, '0') + ':' + 
                              agora.getSeconds().toString().padStart(2, '0');
@@ -125,7 +136,7 @@ function checkIdleState(isFromPTT = false) {
 // ==========================================
 // 🎛️ DETECÇÃO DTMF
 // ==========================================
-function processDTMFFrame(buffer, sampleRate) {
+async function processDTMFFrame(buffer, sampleRate) {
     if (!sampleRate) return null;
 
     const rows = [697, 770, 852, 941];
@@ -216,6 +227,73 @@ function processDTMFFrame(buffer, sampleRate) {
 
         if (stableCount >= STABLE_MIN && !dtmfLocked) {
             if (stableKey !== null && lastDetectedKey === null) {
+                
+                // ==========================================
+                // 🕒 AJUSTE DE HORA
+                // ==========================================
+                if (waitingTimeConfig) {
+                    if (
+                        stableCount >= STABLE_MIN &&
+                        stableKey !== null &&
+                        lastDetectedKey === null
+                    ) {
+                        lastDetectedKey = stableKey; // FIX: Previne registros duplicados do mesmo toque
+                        lastKeyTime = performance.now();
+                        
+                        timeConfigSequence += stableKey;
+
+                        timeConfigSequence = timeConfigSequence.replace(/[^0-9]/g, '');
+
+                        if (timeConfigSequence.length > 4) {
+                            timeConfigSequence = timeConfigSequence.slice(-4);
+                        }
+
+                        dbgSeq.innerText = timeConfigSequence;
+
+                        if (timeConfigSequence.length === 4) {
+
+                            const hora = parseInt(timeConfigSequence.slice(0, 2));
+                            const minuto = parseInt(timeConfigSequence.slice(2, 4));
+
+                            if (
+                                hora >= 0 &&
+                                hora <= 23 &&
+                                minuto >= 0 &&
+                                minuto <= 59
+                            ) {
+
+                                const target = getVirtualDate();
+
+                                target.setHours(hora);
+                                target.setMinutes(minuto);
+                                target.setSeconds(0);
+
+                                virtualBaseTime = target.getTime();
+
+                                appStartTime = Date.now();
+
+                                waitingTimeConfig = false;
+
+                                clearTimeout(timeConfigTimeout);
+
+                                await confirmarHoraConfigurada(hora, minuto);
+
+                            } else {
+
+                                waitingTimeConfig = false;
+
+                                clearTimeout(timeConfigTimeout);
+
+                                timeConfigSequence = "";
+
+                                resetToIdle();
+                            }
+                        }
+                    }
+
+                    return null;
+                }
+
                 lastDetectedKey = stableKey;
                 lastKeyTime = performance.now();
 
@@ -249,6 +327,12 @@ function processDTMFFrame(buffer, sampleRate) {
                 if (dtmfSequence.endsWith("3266")) {
                     dtmfResult.innerText = "ECHO ATIVADO";
                     dtmfCommand = "ECHO_ON";
+                    dtmfLocked = true;
+                }
+                // TIME CONFIG
+                if (dtmfSequence.endsWith("2586")) {
+                    dtmfResult.innerText = "AJUSTE DE HORA";
+                    dtmfCommand = "TIME_CONFIG";
                     dtmfLocked = true;
                 }
                 
@@ -335,6 +419,10 @@ async function startRecording() {
                     echoEnabled = true;
                     executarEchoOn().finally(resetToIdle);
                 }
+                
+                if (dtmfCommand === "TIME_CONFIG") {
+                    iniciarModoAjusteHora().finally(resetToIdle);
+                }
 
                 dtmfCommand = null;
                 return;
@@ -419,7 +507,7 @@ async function executarAnuncioDeHora() {
     pendingAnnouncement = false; isPlaying = true;
     setStatus('HORA', 'status-playing');
     
-    const agora = new Date();
+    const agora = getVirtualDate();
     const h = agora.getHours().toString().padStart(2, '0');
     const m = agora.getMinutes().toString().padStart(2, '0');
     
@@ -450,7 +538,7 @@ async function executarAnuncioDeHoraDTMF() {
     isPlaying = true;
     setStatus('HORA', 'status-playing');
 
-    const agora = new Date();
+    const agora = getVirtualDate();
     const hora = agora.getHours();
 
     let saudacao = "";
@@ -520,10 +608,55 @@ async function executarAutoConfirmacao(file) {
     isPlaying = false;
 }
 
+async function iniciarModoAjusteHora() {
+    if (isPlaying) return;
+
+    waitingTimeConfig = true;
+    timeConfigSequence = "";
+    isPlaying = true;
+
+    setStatus('AJUSTE HORA', 'status-playing');
+
+    await playBeep(TONE_START_FREQ, TONE_DURATION);
+    await playAudioFile("ajtm.mp3");
+    await playBeep(TONE_END_FREQ, TONE_DURATION);
+
+    isPlaying = false;
+
+    clearTimeout(timeConfigTimeout);
+    timeConfigTimeout = setTimeout(async () => {
+        if (!waitingTimeConfig) return;
+
+        waitingTimeConfig = false;
+        timeConfigSequence = "";
+
+        await playBeep(TONE_START_FREQ, TONE_DURATION);
+        await playAudioFile("end.mp3");
+        await playBeep(TONE_END_FREQ, TONE_DURATION);
+
+        resetToIdle();
+    }, 10000);
+}
+
+async function confirmarHoraConfigurada(hora, minuto) {
+    isPlaying = true;
+    setStatus('HORA AJUSTADA', 'status-playing');
+
+    await playBeep(TONE_START_FREQ, TONE_DURATION);
+    await playAudioFile("confirmado.mp3");
+    await playAudioFile(`${hora.toString().padStart(2,'0')}h.mp3`);
+    await playAudioFile(`${minuto.toString().padStart(2,'0')}m.mp3`);
+    await playBeep(TONE_END_FREQ, TONE_DURATION);
+
+    isPlaying = false;
+    timeConfigSequence = "";
+    resetToIdle();
+}
+
 function startClockSync() {
     setInterval(() => {
         if (!isSystemReady) return;
-        const agora = new Date();
+        const agora = getVirtualDate();
         if (agora.getSeconds() === 0) {
             const config = selectAutoTime.value, min = agora.getMinutes();
             let trigger = (config==='1M') || (config==='5M' && min%5===0) || (config==='15M' && min%15===0) || (config==='30M' && min%30===0) || (config==='1H' && min===0);
