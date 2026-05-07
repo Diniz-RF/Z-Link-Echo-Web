@@ -412,6 +412,8 @@ async function startRecording() {
                 lastRecording = null;
                 waitingTimeConfig = false;
                 clearInterval(timeConfigInterval);
+                timeConfigInterval = null;
+                timeConfigRemaining = 10000;
                 await confirmarHoraConfigurada(hora, minuto);
                 return;
             }
@@ -566,7 +568,6 @@ async function iniciarModoAjusteHora() {
     await playAudioFile("ajtm.mp3");
     await playBeep(TONE_END_FREQ, TONE_DURATION);
     
-    // CORREÇÃO: Silêncio de 500ms para estabilização do SQL do rádio
     await new Promise(resolve => setTimeout(resolve, 500));
 
     isPlaying = false;
@@ -609,6 +610,7 @@ async function confirmarHoraConfigurada(hora, minuto) {
     await playAudioFile(`${hora.toString().padStart(2,'0')}h.mp3`);
     await playAudioFile(`${minuto.toString().padStart(2,'0')}m.mp3`);
     await playBeep(TONE_END_FREQ, TONE_DURATION);
+    await new Promise(resolve => setTimeout(resolve, 500));
     isPlaying = false;
     timeConfigSequence = "";
     resetToIdle();
