@@ -178,11 +178,9 @@ async function processDTMFFrame(buffer, sampleRate) {
     dbgRow.innerText = Math.round(maxRowMag);
     dbgCol.innerText = Math.round(maxColMag);
 
-    // 🔥 NOVA VALIDAÇÃO PROFISSIONAL
     const MIN_LEVEL = 3000;
     const DOMINANCE = 2.0;
 
-    // calcular segunda maior frequência (ROW)
     let secondRowMag = 0;
     for (let i = 0; i < rows.length; i++) {
         if (i !== rowIdx) {
@@ -191,7 +189,6 @@ async function processDTMFFrame(buffer, sampleRate) {
         }
     }
 
-    // calcular segunda maior frequência (COL)
     let secondColMag = 0;
     for (let i = 0; i < cols.length; i++) {
         if (i !== colIdx) {
@@ -225,75 +222,53 @@ async function processDTMFFrame(buffer, sampleRate) {
             stableCount = 1;
         }
 
-        if (stableCount >= STABLE_MIN && !dtmfLocked) {
-            if (stableKey !== null && lastDetectedKey === null) {
-                
-                // ==========================================
-                // 🕒 AJUSTE DE HORA
-                // ==========================================
-                if (waitingTimeConfig) {
-                    if (
-                        stableCount >= STABLE_MIN &&
-                        stableKey !== null &&
-                        lastDetectedKey === null
-                    ) {
-                        lastDetectedKey = stableKey; // FIX: Previne registros duplicados do mesmo toque
-                        lastKeyTime = performance.now();
-                        
-                        timeConfigSequence += stableKey;
+        if (stableCount >= STABLE_MIN) {
+            if (waitingTimeConfig) {
+                if (lastDetectedKey === null) {
+                    lastDetectedKey = stableKey;
+                    lastKeyTime = performance.now();
+                    
+                    timeConfigSequence += stableKey;
+                    timeConfigSequence = timeConfigSequence.replace(/[^0-9]/g, '');
 
-                        timeConfigSequence = timeConfigSequence.replace(/[^0-9]/g, '');
-
-                        if (timeConfigSequence.length > 4) {
-                            timeConfigSequence = timeConfigSequence.slice(-4);
-                        }
-
-                        dbgSeq.innerText = timeConfigSequence;
-
-                        if (timeConfigSequence.length === 4) {
-
-                            const hora = parseInt(timeConfigSequence.slice(0, 2));
-                            const minuto = parseInt(timeConfigSequence.slice(2, 4));
-
-                            if (
-                                hora >= 0 &&
-                                hora <= 23 &&
-                                minuto >= 0 &&
-                                minuto <= 59
-                            ) {
-
-                                const target = getVirtualDate();
-
-                                target.setHours(hora);
-                                target.setMinutes(minuto);
-                                target.setSeconds(0);
-
-                                virtualBaseTime = target.getTime();
-
-                                appStartTime = Date.now();
-
-                                waitingTimeConfig = false;
-
-                                clearTimeout(timeConfigTimeout);
-
-                                await confirmarHoraConfigurada(hora, minuto);
-
-                            } else {
-
-                                waitingTimeConfig = false;
-
-                                clearTimeout(timeConfigTimeout);
-
-                                timeConfigSequence = "";
-
-                                resetToIdle();
-                            }
-                        }
+                    if (timeConfigSequence.length > 4) {
+                        timeConfigSequence = timeConfigSequence.slice(-4);
                     }
 
-                    return null;
+                    dbgSeq.innerText = timeConfigSequence;
+
+                    if (timeConfigSequence.length === 4) {
+                        const hora = parseInt(timeConfigSequence.slice(0, 2));
+                        const minuto = parseInt(timeConfigSequence.slice(2, 4));
+
+                        if (hora >= 0 && hora <= 23 && minuto >= 0 && minuto <= 59) {
+                            const target = getVirtualDate();
+                            target.setHours(hora);
+                            target.setMinutes(minuto);
+                            target.setSeconds(0);
+                            virtualBaseTime = target.getTime();
+                            appStartTime = Date.now();
+                            waitingTimeConfig = false;
+                            clearTimeout(timeConfigTimeout);
+                            await confirmarHoraConfigurada(hora, minuto);
+                        } else {
+                            waitingTimeConfig = false;
+                            clearTimeout(timeConfigTimeout);
+                            timeConfigSequence = "";
+                            resetToIdle();
+                        }
+                    }
+                }
+                
+                // CORREÇÃO: Resetar lastDetectedKey durante o modo ajuste
+                if (performance.now() - lastKeyTime > RELEASE_TIMEOUT) {
+                    lastDetectedKey = null;
                 }
 
+                return null;
+            }
+
+            if (lastDetectedKey === null) {
                 lastDetectedKey = stableKey;
                 lastKeyTime = performance.now();
 
@@ -316,20 +291,16 @@ async function processDTMFFrame(buffer, sampleRate) {
                     dtmfCommand = "HORA";
                     dtmfLocked = true;
                 }
-                
-                // ECHO OFF
                 if (dtmfSequence.endsWith("3263")) {
                     dtmfResult.innerText = "ECHO DESATIVADO";
                     dtmfCommand = "ECHO_OFF";
                     dtmfLocked = true;
                 }
-                // ECHO ON
                 if (dtmfSequence.endsWith("3266")) {
                     dtmfResult.innerText = "ECHO ATIVADO";
                     dtmfCommand = "ECHO_ON";
                     dtmfLocked = true;
                 }
-                // TIME CONFIG
                 if (dtmfSequence.endsWith("2586")) {
                     dtmfResult.innerText = "AJUSTE DE HORA";
                     dtmfCommand = "TIME_CONFIG";
@@ -393,51 +364,34 @@ async function startRecording() {
         mediaRecorder = new MediaRecorder(micStream);
         mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
         
-        mediaRecorder.onstop = () => {
+        mediaRecorder.onstop = async () => {
             recSource.disconnect();
-
-            // ========================
-            // 🎯 CASO TENHA COMANDO DTMF
-            // ========================
             if (dtmfCommand !== null) {
-                // NÃO salvar gravação
                 audioChunks = [];
-
                 resetTimerUI();
                 timeRemaining = MAX_RECORD_TIME;
-
                 if (dtmfCommand === "REPLAY") executarReplay().finally(resetToIdle);
                 if (dtmfCommand === "HORA") executarAnuncioDeHoraDTMF().finally(resetToIdle);
                 if (dtmfCommand === "AUTO") executarAutoConfirmacao(dtmfAudioFile).finally(resetToIdle);
-
                 if (dtmfCommand === "ECHO_OFF") {
                     echoEnabled = false;
                     executarEchoOff().finally(resetToIdle);
                 }
-
                 if (dtmfCommand === "ECHO_ON") {
                     echoEnabled = true;
                     executarEchoOn().finally(resetToIdle);
                 }
-                
                 if (dtmfCommand === "TIME_CONFIG") {
-                    iniciarModoAjusteHora().finally(resetToIdle);
+                    await iniciarModoAjusteHora();
                 }
-
                 dtmfCommand = null;
                 return;
             }
-
-            // ========================
-            // 🎯 CASO NORMAL (SEM DTMF)
-            // ========================
             if (audioChunks.length > 0) {
                 lastRecording = audioChunks.slice();
             }
-
             processAndPlayRecording();
         };
-
         mediaRecorder.start(); 
         startTimer();
     } catch (err) { 
@@ -454,16 +408,12 @@ function stopRecording() {
 
 async function processAndPlayRecording() {
     if (!echoEnabled) {
-        isPlayingPTT = false;
-        isPlaying = false;
-        resetToIdle();
-        checkIdleState(true);
+        isPlayingPTT = false; isPlaying = false;
+        resetToIdle(); checkIdleState(true);
         return;
     }
-
     isPlaying = true; isPlayingPTT = true; 
     setStatus('REPRODUÇÃO', 'status-playing');
-    
     try {
         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
         const audioBuffer = await audioCtx.decodeAudioData(await audioBlob.arrayBuffer());
@@ -506,13 +456,10 @@ async function executarAnuncioDeHora() {
     if (audioCtx.state === 'suspended') await audioCtx.resume();
     pendingAnnouncement = false; isPlaying = true;
     setStatus('HORA', 'status-playing');
-    
     const agora = getVirtualDate();
     const h = agora.getHours().toString().padStart(2, '0');
     const m = agora.getMinutes().toString().padStart(2, '0');
-    
     await playBeep(TONE_START_FREQ, TONE_DURATION);
-    
     let playedCustom = false;
     if (customAudioData) {
         try {
@@ -522,48 +469,31 @@ async function executarAnuncioDeHora() {
             playedCustom = true;
         } catch (e) { playedCustom = false; }
     }
-    
     if (!playedCustom) await playAudioFile('chamada.mp3');
     await playAudioFile(`${h}h.mp3`); 
     await playAudioFile(`${m}m.mp3`);
     await playBeep(TONE_END_FREQ, TONE_DURATION);
-    
     isPlaying = false; 
 }
 
 async function executarAnuncioDeHoraDTMF() {
     if (audioCtx.state === 'suspended') await audioCtx.resume();
     pendingAnnouncement = false;
-
     isPlaying = true;
     setStatus('HORA', 'status-playing');
-
     const agora = getVirtualDate();
     const hora = agora.getHours();
-
     let saudacao = "";
-
-    if (hora >= 0 && hora <= 11) {
-        saudacao = "dia.mp3";
-    } else if (hora >= 12 && hora <= 17) {
-        saudacao = "tarde.mp3";
-    } else {
-        saudacao = "noite.mp3";
-    }
-
+    if (hora >= 0 && hora <= 11) { saudacao = "dia.mp3"; } 
+    else if (hora >= 12 && hora <= 17) { saudacao = "tarde.mp3"; } 
+    else { saudacao = "noite.mp3"; }
     const h = hora.toString().padStart(2, '0');
     const m = agora.getMinutes().toString().padStart(2, '0');
-
     await playBeep(TONE_START_FREQ, TONE_DURATION);
-
-    // 🔥 NOVO: áudio por período
     await playAudioFile(saudacao);
-
     await playAudioFile(`${h}h.mp3`);
     await playAudioFile(`${m}m.mp3`);
-
     await playBeep(TONE_END_FREQ, TONE_DURATION);
-
     isPlaying = false;
 }
 
@@ -571,24 +501,15 @@ async function executarReplay() {
     if (isPlaying) return;
     isPlaying = true;
     setStatus('REPLAY', 'status-playing');
-
     try {
-        if (!lastRecording || lastRecording.length === 0) {
-            isPlaying = false;
-            return;
-        }
-
+        if (!lastRecording || lastRecording.length === 0) { isPlaying = false; return; }
         const audioBlob = new Blob(lastRecording, { type: 'audio/webm' });
         const audioBuffer = await audioCtx.decodeAudioData(await audioBlob.arrayBuffer());
-
         await playBeep(TONE_START_FREQ, TONE_DURATION);
         await playAudioFile("replay.mp3");
         await playBuffer(audioBuffer);
         await playBeep(TONE_END_FREQ, TONE_DURATION);
-
-    } catch (e) {
-        console.error(e);
-    }
+    } catch (e) { console.error(e); }
     isPlaying = false;
 }
 
@@ -596,44 +517,32 @@ async function executarAutoConfirmacao(file) {
     if (isPlaying) return;
     isPlaying = true;
     setStatus('CONFIRMAÇÃO', 'status-playing');
-    
     try {
         await playBeep(TONE_START_FREQ, TONE_DURATION);
         await playAudioFile(file);
         await playBeep(TONE_END_FREQ, TONE_DURATION);
-    } catch (e) {
-        console.error("Erro ao tocar arquivo de confirmação: ", e);
-    }
-    
+    } catch (e) { console.error("Erro no áudio de confirmação: ", e); }
     isPlaying = false;
 }
 
 async function iniciarModoAjusteHora() {
     if (isPlaying) return;
-
     waitingTimeConfig = true;
     timeConfigSequence = "";
     isPlaying = true;
-
     setStatus('AJUSTE HORA', 'status-playing');
-
     await playBeep(TONE_START_FREQ, TONE_DURATION);
     await playAudioFile("ajtm.mp3");
     await playBeep(TONE_END_FREQ, TONE_DURATION);
-
     isPlaying = false;
-
     clearTimeout(timeConfigTimeout);
     timeConfigTimeout = setTimeout(async () => {
         if (!waitingTimeConfig) return;
-
         waitingTimeConfig = false;
         timeConfigSequence = "";
-
         await playBeep(TONE_START_FREQ, TONE_DURATION);
         await playAudioFile("end.mp3");
         await playBeep(TONE_END_FREQ, TONE_DURATION);
-
         resetToIdle();
     }, 10000);
 }
@@ -641,13 +550,11 @@ async function iniciarModoAjusteHora() {
 async function confirmarHoraConfigurada(hora, minuto) {
     isPlaying = true;
     setStatus('HORA AJUSTADA', 'status-playing');
-
     await playBeep(TONE_START_FREQ, TONE_DURATION);
     await playAudioFile("confirmado.mp3");
     await playAudioFile(`${hora.toString().padStart(2,'0')}h.mp3`);
     await playAudioFile(`${minuto.toString().padStart(2,'0')}m.mp3`);
     await playBeep(TONE_END_FREQ, TONE_DURATION);
-
     isPlaying = false;
     timeConfigSequence = "";
     resetToIdle();
@@ -679,9 +586,7 @@ customAudioInput.addEventListener('change', async (e) => {
         const arrayBuffer = await file.arrayBuffer();
         const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
         if (audioBuffer.duration > MAX_CUSTOM_AUDIO_DURATION) {
-            alert("Limite 30s."); 
-            resetCustomAudio(); 
-            return;
+            alert("Limite 30s."); resetCustomAudio(); return;
         }
         const reader = new FileReader();
         reader.onload = (ev) => {
@@ -699,8 +604,7 @@ function resetCustomAudio() {
     customAudioData = null; customAudioName = null;
     localStorage.removeItem('ptt_customAudioData');
     localStorage.removeItem('ptt_customAudioName');
-    customAudioInput.value = ''; 
-    updateAudioLabel();
+    customAudioInput.value = ''; updateAudioLabel();
 }
 
 function updateAudioLabel() {
@@ -740,10 +644,7 @@ async function forceInitialize() {
 }
 
 window.addEventListener('keydown', async (e) => {
-    if (pttReleaseTimer) {
-        clearTimeout(pttReleaseTimer);
-        pttReleaseTimer = null;
-    }
+    if (pttReleaseTimer) { clearTimeout(pttReleaseTimer); pttReleaseTimer = null; }
     if (!isSystemReady || isPlaying || isPlayingPTT || e.repeat || isRecording || forceWaitRelease) return;
     if (e.key === 'F7' || e.key === 'F2') { e.preventDefault(); activeKey = e.key; await startRecording(); }
 });
@@ -752,17 +653,9 @@ window.addEventListener('keyup', (e) => {
     if (e.key === activeKey) {
         e.preventDefault();
         if (pttReleaseTimer) clearTimeout(pttReleaseTimer);
-
         pttReleaseTimer = setTimeout(() => {
-            if (forceWaitRelease) {
-                forceWaitRelease = false;
-                activeKey = null;
-                processAndPlayRecording();
-            } 
-            else if (isRecording) {
-                activeKey = null;
-                stopRecording();
-            }
+            if (forceWaitRelease) { forceWaitRelease = false; activeKey = null; processAndPlayRecording(); } 
+            else if (isRecording) { activeKey = null; stopRecording(); }
         }, 400);
     }
 });
