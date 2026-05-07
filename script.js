@@ -621,6 +621,7 @@ async function confirmarHoraConfigurada(hora, minuto) {
     await new Promise(resolve => setTimeout(resolve, 500));
     isPlaying = false;
     timeConfigSequence = "";
+    resetTimerUI();
     resetToIdle();
 }
 
