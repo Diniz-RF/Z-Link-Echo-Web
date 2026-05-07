@@ -36,7 +36,10 @@ let pendingTimeConfirmation = null;
 
 let waitingTimeConfig = false;
 let timeConfigTimeout = null;
+let timeConfigRemaining = 10000;
+let timeConfigInterval = null;
 let timeConfigSequence = "";
+let timeConfigCompleted = false;
 let appStartTime = Date.now();
 let virtualBaseTime = Date.now();
 
@@ -225,11 +228,20 @@ async function processDTMFFrame(buffer, sampleRate) {
 
         if (stableCount >= STABLE_MIN) {
             if (waitingTimeConfig) {
+                // CORREÇÃO 1: Liberação de lastDetectedKey mesmo após completar a sequência
+                if (timeConfigCompleted) {
+                    if (performance.now() - lastKeyTime > RELEASE_TIMEOUT) {
+                        lastDetectedKey = null;
+                    }
+                    return null;
+                }
+                
                 if (lastDetectedKey === null) {
                     lastDetectedKey = stableKey;
                     lastKeyTime = performance.now();
                     
                     timeConfigSequence += stableKey;
+                    timeConfigRemaining = 10000;
                     timeConfigSequence = timeConfigSequence.replace(/[^0-9]/g, '');
 
                     if (timeConfigSequence.length > 4) {
@@ -249,17 +261,17 @@ async function processDTMFFrame(buffer, sampleRate) {
                             target.setSeconds(0);
                             virtualBaseTime = target.getTime();
                             appStartTime = Date.now();
-                            waitingTimeConfig = false;
-                            clearTimeout(timeConfigTimeout);
                             
-                            // ARMAZENAR CONFIRMAÇÃO PENDENTE
                             pendingTimeConfirmation = {
                                 hora,
                                 minuto
                             };
+                            timeConfigCompleted = true;
                         } else {
                             waitingTimeConfig = false;
-                            clearTimeout(timeConfigTimeout);
+                            timeConfigCompleted = false;
+                            pendingTimeConfirmation = null;
+                            clearInterval(timeConfigInterval);
                             timeConfigSequence = "";
                             resetToIdle();
                         }
@@ -393,12 +405,15 @@ async function startRecording() {
                 return;
             }
 
-            // VERIFICAR CONFIRMAÇÃO PENDENTE DE AJUSTE DE HORA
+            // CORREÇÃO 2: Limpeza do Interval imediata na confirmação
             if (pendingTimeConfirmation) {
                 const { hora, minuto } = pendingTimeConfirmation;
                 pendingTimeConfirmation = null;
+                timeConfigCompleted = false;
                 audioChunks = [];
                 lastRecording = null;
+                waitingTimeConfig = false;
+                clearInterval(timeConfigInterval); // Adicionado conforme solicitado
                 await confirmarHoraConfigurada(hora, minuto);
                 return;
             }
@@ -545,22 +560,43 @@ async function iniciarModoAjusteHora() {
     if (isPlaying) return;
     waitingTimeConfig = true;
     timeConfigSequence = "";
+    timeConfigCompleted = false;
+    pendingTimeConfirmation = null;
     isPlaying = true;
     setStatus('AJUSTE HORA', 'status-playing');
     await playBeep(TONE_START_FREQ, TONE_DURATION);
     await playAudioFile("ajtm.mp3");
     await playBeep(TONE_END_FREQ, TONE_DURATION);
     isPlaying = false;
-    clearTimeout(timeConfigTimeout);
-    timeConfigTimeout = setTimeout(async () => {
-        if (!waitingTimeConfig) return;
-        waitingTimeConfig = false;
-        timeConfigSequence = "";
-        await playBeep(TONE_START_FREQ, TONE_DURATION);
-        await playAudioFile("end.mp3");
-        await playBeep(TONE_END_FREQ, TONE_DURATION);
-        resetToIdle();
-    }, 10000);
+    
+    timeConfigRemaining = 10000;
+    clearInterval(timeConfigInterval);
+    timeConfigInterval = setInterval(async () => {
+        if (!waitingTimeConfig) {
+            clearInterval(timeConfigInterval);
+            return;
+        }
+
+        if (isRecording) {
+            return;
+        }
+
+        timeConfigRemaining -= 100;
+
+        if (timeConfigRemaining <= 0) {
+            clearInterval(timeConfigInterval);
+            waitingTimeConfig = false;
+            timeConfigSequence = "";
+            timeConfigCompleted = false;
+            pendingTimeConfirmation = null;
+
+            await playBeep(TONE_START_FREQ, TONE_DURATION);
+            await playAudioFile("end.mp3");
+            await playBeep(TONE_END_FREQ, TONE_DURATION);
+
+            resetToIdle();
+        }
+    }, 100);
 }
 
 async function confirmarHoraConfigurada(hora, minuto) {
