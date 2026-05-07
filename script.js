@@ -32,6 +32,7 @@ let pendingAnnouncement = false, idleTimer = null;
 
 let customAudioData = null;
 let customAudioName = null;
+let pendingTimeConfirmation = null;
 
 let waitingTimeConfig = false;
 let timeConfigTimeout = null;
@@ -250,7 +251,12 @@ async function processDTMFFrame(buffer, sampleRate) {
                             appStartTime = Date.now();
                             waitingTimeConfig = false;
                             clearTimeout(timeConfigTimeout);
-                            await confirmarHoraConfigurada(hora, minuto);
+                            
+                            // ARMAZENAR CONFIRMAÇÃO PENDENTE
+                            pendingTimeConfirmation = {
+                                hora,
+                                minuto
+                            };
                         } else {
                             waitingTimeConfig = false;
                             clearTimeout(timeConfigTimeout);
@@ -260,7 +266,6 @@ async function processDTMFFrame(buffer, sampleRate) {
                     }
                 }
                 
-                // CORREÇÃO: Resetar lastDetectedKey durante o modo ajuste
                 if (performance.now() - lastKeyTime > RELEASE_TIMEOUT) {
                     lastDetectedKey = null;
                 }
@@ -387,6 +392,17 @@ async function startRecording() {
                 dtmfCommand = null;
                 return;
             }
+
+            // VERIFICAR CONFIRMAÇÃO PENDENTE DE AJUSTE DE HORA
+            if (pendingTimeConfirmation) {
+                const { hora, minuto } = pendingTimeConfirmation;
+                pendingTimeConfirmation = null;
+                audioChunks = [];
+                lastRecording = null;
+                await confirmarHoraConfigurada(hora, minuto);
+                return;
+            }
+
             if (audioChunks.length > 0) {
                 lastRecording = audioChunks.slice();
             }
@@ -576,7 +592,7 @@ function startClockSync() {
 }
 
 // ==========================================
-// 🚀 BOOT E INICIALIZAÇÃO
+// ⟲ BOOT E INICIALIZAÇÃO
 // ==========================================
 customAudioInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
