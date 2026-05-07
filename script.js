@@ -143,6 +143,14 @@ function checkIdleState(isFromPTT = false) {
 async function processDTMFFrame(buffer, sampleRate) {
     if (!sampleRate) return null;
 
+    // BLOQUEIO DE DETECÇÃO FORA DE TRANSMISSÃO/AJUSTE
+    if (!isRecording && !waitingTimeConfig) {
+        lastDetectedKey = null;
+        stableKey = null;
+        stableCount = 0;
+        return null;
+    }
+
     const rows = [697, 770, 852, 941];
     const cols = [1209, 1336, 1477];
     const keypad = [
