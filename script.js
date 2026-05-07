@@ -228,7 +228,6 @@ async function processDTMFFrame(buffer, sampleRate) {
 
         if (stableCount >= STABLE_MIN) {
             if (waitingTimeConfig) {
-                // CORREÇÃO 1: Liberação de lastDetectedKey mesmo após completar a sequência
                 if (timeConfigCompleted) {
                     if (performance.now() - lastKeyTime > RELEASE_TIMEOUT) {
                         lastDetectedKey = null;
@@ -405,7 +404,6 @@ async function startRecording() {
                 return;
             }
 
-            // CORREÇÃO 2: Limpeza do Interval imediata na confirmação
             if (pendingTimeConfirmation) {
                 const { hora, minuto } = pendingTimeConfirmation;
                 pendingTimeConfirmation = null;
@@ -413,7 +411,7 @@ async function startRecording() {
                 audioChunks = [];
                 lastRecording = null;
                 waitingTimeConfig = false;
-                clearInterval(timeConfigInterval); // Adicionado conforme solicitado
+                clearInterval(timeConfigInterval);
                 await confirmarHoraConfigurada(hora, minuto);
                 return;
             }
@@ -567,6 +565,10 @@ async function iniciarModoAjusteHora() {
     await playBeep(TONE_START_FREQ, TONE_DURATION);
     await playAudioFile("ajtm.mp3");
     await playBeep(TONE_END_FREQ, TONE_DURATION);
+    
+    // CORREÇÃO: Silêncio de 500ms para estabilização do SQL do rádio
+    await new Promise(resolve => setTimeout(resolve, 500));
+
     isPlaying = false;
     
     timeConfigRemaining = 10000;
