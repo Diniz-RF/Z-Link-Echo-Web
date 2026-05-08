@@ -544,11 +544,16 @@ async function executarReplay() {
         if (!lastRecording || lastRecording.length === 0) { isPlaying = false; return; }
         const audioBlob = new Blob(lastRecording, { type: 'audio/webm' });
         const audioBuffer = await audioCtx.decodeAudioData(await audioBlob.arrayBuffer());
+        
+        const totalDur = (TONE_DURATION / 1000) * 2 + audioBuffer.duration;
+        startPlaybackTimer(totalDur);
+
         await playBeep(TONE_START_FREQ, TONE_DURATION);
         await playAudioFile("replay.mp3");
         await playBuffer(audioBuffer);
         await playBeep(TONE_END_FREQ, TONE_DURATION);
     } catch (e) { console.error(e); }
+    stopPlaybackTimer();
     isPlaying = false;
 }
 
@@ -776,6 +781,7 @@ function startTimer() {
 function stopTimer() { clearInterval(recordTimerInterval); }
 
 function startPlaybackTimer(dur) {
+    clearInterval(playbackTimerInterval);
     playbackCurrentTime = 0; timeLabel.innerText = "REPRODUÇÃO";
     progressFill.className = 'progress-fill fill-playing';
     playbackTimerInterval = setInterval(() => {
