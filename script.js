@@ -545,7 +545,7 @@ async function executarReplay() {
         const audioBlob = new Blob(lastRecording, { type: 'audio/webm' });
         const audioBuffer = await audioCtx.decodeAudioData(await audioBlob.arrayBuffer());
         
-        const totalDur = (TONE_DURATION / 1000) * 2 + audioBuffer.duration;
+        const totalDur = audioBuffer.duration;
         startPlaybackTimer(totalDur);
 
         await playBeep(TONE_START_FREQ, TONE_DURATION);
