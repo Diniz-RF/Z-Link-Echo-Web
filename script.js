@@ -311,12 +311,28 @@ async function processDTMFFrame(buffer, sampleRate) {
                             };
                             timeConfigCompleted = true;
                         } else {
-                            waitingTimeConfig = false;
-                            timeConfigCompleted = false;
-                            pendingTimeConfirmation = null;
-                            clearInterval(timeConfigInterval);
                             timeConfigSequence = "";
-                            resetToIdle();
+                            pendingTimeConfirmation = null;
+                            timeConfigCompleted = false;
+
+                            timeConfigRemaining = 10000;
+
+                            isPlaying = true;
+
+                            setStatus('AJUSTE HORA', 'status-playing');
+
+                            await playBeep(TONE_START_FREQ, TONE_DURATION);
+
+                            await playAudioFile("reentry.mp3");
+
+                            await playBeep(TONE_END_FREQ, TONE_DURATION);
+
+                            await new Promise(resolve => setTimeout(resolve, 500));
+
+                            isPlaying = false;
+                            setStatus('AJUSTE HORA', 'status-playing');
+
+                            return null;
                         }
                     }
                 }
@@ -445,6 +461,12 @@ async function startRecording() {
                     await iniciarModoAjusteHora();
                 }
                 dtmfCommand = null;
+                return;
+            }
+
+            if (waitingTimeConfig && !pendingTimeConfirmation) {
+                audioChunks = [];
+                lastRecording = null;
                 return;
             }
 
