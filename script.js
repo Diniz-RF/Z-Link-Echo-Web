@@ -257,6 +257,42 @@ async function processDTMFFrame(buffer, sampleRate) {
 
                     dbgSeq.innerText = timeConfigSequence;
 
+                    if (timeConfigSequence === "7886") {
+                        waitingTimeConfig = false;
+                        timeConfigCompleted = false;
+                        pendingTimeConfirmation = null;
+
+                        clearInterval(timeConfigInterval);
+                        timeConfigInterval = null;
+
+                        timeConfigRemaining = 10000;
+
+                        virtualBaseTime = Date.now();
+                        appStartTime = Date.now();
+
+                        timeConfigSequence = "";
+
+                        isPlaying = true;
+
+                        setStatus('RESET HORA', 'status-playing');
+
+                        await playBeep(TONE_START_FREQ, TONE_DURATION);
+
+                        await playAudioFile("resettime.mp3");
+
+                        await playBeep(TONE_END_FREQ, TONE_DURATION);
+
+                        await new Promise(resolve => setTimeout(resolve, 500));
+
+                        isPlaying = false;
+
+                        resetTimerUI();
+
+                        resetToIdle();
+
+                        return null;
+                    }
+
                     if (timeConfigSequence.length === 4) {
                         const hora = parseInt(timeConfigSequence.slice(0, 2));
                         const minuto = parseInt(timeConfigSequence.slice(2, 4));
@@ -546,10 +582,10 @@ async function executarReplay() {
         const audioBuffer = await audioCtx.decodeAudioData(await audioBlob.arrayBuffer());
         
         const totalDur = audioBuffer.duration;
-        startPlaybackTimer(totalDur);
-
+        
         await playBeep(TONE_START_FREQ, TONE_DURATION);
         await playAudioFile("replay.mp3");
+        startPlaybackTimer(totalDur);
         await playBuffer(audioBuffer);
         await playBeep(TONE_END_FREQ, TONE_DURATION);
     } catch (e) { console.error(e); }
