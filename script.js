@@ -291,10 +291,6 @@ async function processDTMFFrame(buffer, sampleRate) {
                     timeConfigRemaining = TIME_CONFIG_TIMEOUT;
                     timeConfigSequence = timeConfigSequence.replace(/[^0-9]/g, '');
 
-                    if (timeConfigSequence.length > 4) {
-                        timeConfigSequence = timeConfigSequence.slice(-4);
-                    }
-
                     dbgSeq.innerText = timeConfigSequence;
 
                     if (timeConfigSequence === "7886") {
