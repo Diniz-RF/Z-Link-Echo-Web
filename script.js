@@ -492,6 +492,7 @@ async function startRecording() {
                     await playBeep(TONE_END_FREQ, TONE_DURATION);
 
                     await new Promise(resolve => setTimeout(resolve, 500));
+                    timeConfigRemaining = TIME_CONFIG_TIMEOUT;
 
                     isPlaying = false;
 
