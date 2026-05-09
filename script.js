@@ -20,6 +20,7 @@ let isPlaying = false;
 let isPlayingPTT = false; 
 let isSystemReady = false; 
 let forceWaitRelease = false; 
+let discardCurrentRecording = false;
 let activeKey = null;
 let pttReleaseTimer = null; 
 
@@ -318,6 +319,7 @@ async function processDTMFFrame(buffer, sampleRate) {
                         timeConfigRemaining = TIME_CONFIG_TIMEOUT;
                         virtualBaseTime = Date.now();
                         appStartTime = Date.now();
+                        discardCurrentRecording = true;
                         audioChunks = []; lastRecording = null;
                         isPlaying = true;
                         setStatus('RESET HORA', 'status-playing');
@@ -485,7 +487,15 @@ async function startRecording() {
                 await confirmarHoraConfigurada(hora, minuto);
                 return;
             }
-            if (audioChunks.length > 0) lastRecording = audioChunks.slice();
+            if (discardCurrentRecording) {
+                discardCurrentRecording = false;
+                audioChunks = [];
+                lastRecording = null;
+                return;
+            }
+            if (audioChunks.length > 0) {
+                lastRecording = audioChunks.slice();
+            }
             processAndPlayRecording();
         };
         mediaRecorder.start(); 
