@@ -713,7 +713,7 @@ async function executarAutoConfirmacao(file) {
 
 async function iniciarModoAjusteHora() {
     if (isPlaying) return;
-    waitingTimeConfig = true;
+    
     timeConfigSequence = "";
     timeConfigCompleted = false;
     pendingTimeConfirmation = null;
@@ -726,6 +726,7 @@ async function iniciarModoAjusteHora() {
     await new Promise(resolve => setTimeout(resolve, 500));
 
     isPlaying = false;
+    waitingTimeConfig = true;
     
     timeConfigRemaining = TIME_CONFIG_TIMEOUT;
     clearInterval(timeConfigInterval);
