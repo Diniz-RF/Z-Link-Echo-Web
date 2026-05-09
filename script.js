@@ -21,6 +21,7 @@ let isPlayingPTT = false;
 let isSystemReady = false; 
 let forceWaitRelease = false; 
 let discardCurrentRecording = false;
+let pendingReentryPlayback = false;
 let activeKey = null;
 let pttReleaseTimer = null; 
 
@@ -282,15 +283,8 @@ async function processDTMFFrame(buffer, sampleRate) {
                         pendingTimeConfirmation = null;
                         timeConfigCompleted = false;
                         timeConfigRemaining = TIME_CONFIG_TIMEOUT;
-                        audioChunks = []; lastRecording = null;
-                        isPlaying = true;
-                        setStatus('AJUSTE HORA', 'status-playing');
-                        await playBeep(TONE_START_FREQ, TONE_DURATION);
-                        await playAudioFile("reentry.mp3");
-                        await playBeep(TONE_END_FREQ, TONE_DURATION);
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                        isPlaying = false;
-                        setStatus('AJUSTE HORA', 'status-playing');
+                        pendingReentryPlayback = true;
+                        discardCurrentRecording = true;
                         return null;
                     }
 
@@ -348,14 +342,8 @@ async function processDTMFFrame(buffer, sampleRate) {
                             pendingTimeConfirmation = null;
                             timeConfigCompleted = false;
                             timeConfigRemaining = TIME_CONFIG_TIMEOUT;
-                            isPlaying = true;
-                            setStatus('AJUSTE HORA', 'status-playing');
-                            await playBeep(TONE_START_FREQ, TONE_DURATION);
-                            await playAudioFile("reentry.mp3");
-                            await playBeep(TONE_END_FREQ, TONE_DURATION);
-                            await new Promise(resolve => setTimeout(resolve, 500));
-                            isPlaying = false;
-                            setStatus('AJUSTE HORA', 'status-playing');
+                            pendingReentryPlayback = true;
+                            discardCurrentRecording = true;
                             return null;
                         }
                     }
@@ -487,12 +475,35 @@ async function startRecording() {
                 await confirmarHoraConfigurada(hora, minuto);
                 return;
             }
+            
             if (discardCurrentRecording) {
                 discardCurrentRecording = false;
                 audioChunks = [];
                 lastRecording = null;
+                
+                if (pendingReentryPlayback) {
+                    pendingReentryPlayback = false;
+
+                    isPlaying = true;
+
+                    setStatus('AJUSTE HORA', 'status-playing');
+
+                    await playBeep(TONE_START_FREQ, TONE_DURATION);
+
+                    await playAudioFile("reentry.mp3");
+
+                    await playBeep(TONE_END_FREQ, TONE_DURATION);
+
+                    await new Promise(resolve => setTimeout(resolve, 500));
+
+                    isPlaying = false;
+
+                    setStatus('AJUSTE HORA', 'status-playing');
+                }
+
                 return;
             }
+
             if (audioChunks.length > 0) {
                 lastRecording = audioChunks.slice();
             }
