@@ -463,9 +463,6 @@ async function startRecording() {
                 dtmfCommand = null;
                 return;
             }
-            if (waitingTimeConfig && !pendingTimeConfirmation) {
-                audioChunks = []; lastRecording = null; return;
-            }
             if (pendingTimeConfirmation) {
                 const { hora, minuto } = pendingTimeConfirmation;
                 pendingTimeConfirmation = null; timeConfigCompleted = false;
@@ -502,6 +499,10 @@ async function startRecording() {
                 }
 
                 return;
+            }
+
+            if (waitingTimeConfig && !pendingTimeConfirmation) {
+                audioChunks = []; lastRecording = null; return;
             }
 
             if (audioChunks.length > 0) {
