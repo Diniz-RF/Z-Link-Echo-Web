@@ -254,6 +254,7 @@ async function processDTMFFrame(buffer, sampleRate) {
                     }
                     
                     timeConfigSequence += stableKey;
+                    dbgSeq.innerText = timeConfigSequence;
 
                     function isValidTimePrefix(seq) {
                         if (seq === "7" || seq === "78" || seq === "788" || seq === "7886") {
@@ -327,12 +328,12 @@ async function processDTMFFrame(buffer, sampleRate) {
                         const hora = parseInt(timeConfigSequence.slice(0, 2));
                         const minuto = parseInt(timeConfigSequence.slice(2, 4));
                         if (hora >= 0 && hora <= 23 && minuto >= 0 && minuto <= 59) {
+                            timeConfigCompleted = true;
                             const target = getVirtualDate();
                             target.setHours(hora); target.setMinutes(minuto); target.setSeconds(0);
                             virtualBaseTime = target.getTime();
                             appStartTime = Date.now();
                             pendingTimeConfirmation = { hora, minuto };
-                            timeConfigCompleted = true;
                         } else {
                             timeConfigSequence = "";
                             pendingTimeConfirmation = null;
