@@ -45,7 +45,7 @@ let appStartTime = Date.now();
 let virtualBaseTime = Date.now();
 
 // ==========================================
-// 🧠 VARIÁVEIS DTMF (ATUALIZADO - LOCK)
+// 🧠 VARIÁVEIS DTMF
 // ==========================================
 let dtmfSequence = "";
 let dtmfLocked = false;
@@ -144,7 +144,6 @@ function checkIdleState(isFromPTT = false) {
 async function processDTMFFrame(buffer, sampleRate) {
     if (!sampleRate) return null;
 
-    // BLOQUEIO DE DETECÇÃO FORA DE TRANSMISSÃO/AJUSTE
     if (!isRecording && !waitingTimeConfig) {
         lastDetectedKey = null;
         stableKey = null;
@@ -248,48 +247,33 @@ async function processDTMFFrame(buffer, sampleRate) {
                     lastDetectedKey = stableKey;
                     lastKeyTime = performance.now();
                     
+                    // CORREÇÃO 1: Ignorar o caractere # totalmente no ajuste de hora
+                    if (stableKey === "#") {
+                        return null;
+                    }
+                    
                     timeConfigSequence += stableKey;
 
                     function isValidTimePrefix(seq) {
                         if (seq === "7" || seq === "78" || seq === "788" || seq === "7886") {
                             return true;
                         }
-
-                        if (!/^[0-9]+$/.test(seq)) {
-                            return false;
-                        }
-
-                        if (seq.length === 1) {
-                            return ["0", "1", "2"].includes(seq);
-                        }
-
+                        if (!/^[0-9]+$/.test(seq)) return false;
+                        if (seq.length === 1) return ["0", "1", "2"].includes(seq);
                         if (seq.length === 2) {
                             const hh = parseInt(seq);
                             return hh >= 0 && hh <= 23;
                         }
-
                         if (seq.length === 3) {
                             const hh = parseInt(seq.slice(0, 2));
                             const mm1 = parseInt(seq[2]);
-                            return (
-                                hh >= 0 &&
-                                hh <= 23 &&
-                                mm1 >= 0 &&
-                                mm1 <= 5
-                            );
+                            return (hh >= 0 && hh <= 23 && mm1 >= 0 && mm1 <= 5);
                         }
-
                         if (seq.length === 4) {
                             const hh = parseInt(seq.slice(0, 2));
                             const mm = parseInt(seq.slice(2, 4));
-                            return (
-                                hh >= 0 &&
-                                hh <= 23 &&
-                                mm >= 0 &&
-                                mm <= 59
-                            );
+                            return (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59);
                         }
-
                         return false;
                     }
 
@@ -297,28 +281,16 @@ async function processDTMFFrame(buffer, sampleRate) {
                         timeConfigSequence = "";
                         pendingTimeConfirmation = null;
                         timeConfigCompleted = false;
-
                         timeConfigRemaining = TIME_CONFIG_TIMEOUT;
-
-                        audioChunks = [];
-                        lastRecording = null;
-
+                        audioChunks = []; lastRecording = null;
                         isPlaying = true;
-
                         setStatus('AJUSTE HORA', 'status-playing');
-
                         await playBeep(TONE_START_FREQ, TONE_DURATION);
-
                         await playAudioFile("reentry.mp3");
-
                         await playBeep(TONE_END_FREQ, TONE_DURATION);
-
                         await new Promise(resolve => setTimeout(resolve, 500));
-
                         isPlaying = false;
-
                         setStatus('AJUSTE HORA', 'status-playing');
-
                         return null;
                     }
 
@@ -334,90 +306,62 @@ async function processDTMFFrame(buffer, sampleRate) {
                     if (timeConfigSequence === "7886") {
                         waitingTimeConfig = false;
                         timeConfigCompleted = false;
+                        timeConfigSequence = "";
                         pendingTimeConfirmation = null;
-
+                        lastDetectedKey = null;
+                        stableKey = null;
+                        stableCount = 0;
+                        dtmfSequence = "";
+                        dtmfLocked = false;
+                        dbgSeq.innerText = "";
                         clearInterval(timeConfigInterval);
                         timeConfigInterval = null;
-
                         timeConfigRemaining = TIME_CONFIG_TIMEOUT;
-
                         virtualBaseTime = Date.now();
                         appStartTime = Date.now();
-
-                        timeConfigSequence = "";
-
-                        audioChunks = [];
-                        lastRecording = null;
-
+                        audioChunks = []; lastRecording = null;
                         isPlaying = true;
-
                         setStatus('RESET HORA', 'status-playing');
-
                         await playBeep(TONE_START_FREQ, TONE_DURATION);
-
                         await playAudioFile("resettime.mp3");
-
                         await playBeep(TONE_END_FREQ, TONE_DURATION);
-
                         await new Promise(resolve => setTimeout(resolve, 500));
-
                         isPlaying = false;
-
                         resetTimerUI();
-
                         resetToIdle();
-
                         return null;
                     }
 
                     if (timeConfigSequence.length === 4) {
                         const hora = parseInt(timeConfigSequence.slice(0, 2));
                         const minuto = parseInt(timeConfigSequence.slice(2, 4));
-
                         if (hora >= 0 && hora <= 23 && minuto >= 0 && minuto <= 59) {
                             const target = getVirtualDate();
-                            target.setHours(hora);
-                            target.setMinutes(minuto);
-                            target.setSeconds(0);
+                            target.setHours(hora); target.setMinutes(minuto); target.setSeconds(0);
                             virtualBaseTime = target.getTime();
                             appStartTime = Date.now();
-                            
-                            pendingTimeConfirmation = {
-                                hora,
-                                minuto
-                            };
+                            pendingTimeConfirmation = { hora, minuto };
                             timeConfigCompleted = true;
                         } else {
                             timeConfigSequence = "";
                             pendingTimeConfirmation = null;
                             timeConfigCompleted = false;
-
                             timeConfigRemaining = TIME_CONFIG_TIMEOUT;
-
                             isPlaying = true;
-
                             setStatus('AJUSTE HORA', 'status-playing');
-
                             await playBeep(TONE_START_FREQ, TONE_DURATION);
-
                             await playAudioFile("reentry.mp3");
-
                             await playBeep(TONE_END_FREQ, TONE_DURATION);
-
                             await new Promise(resolve => setTimeout(resolve, 500));
-
                             isPlaying = false;
                             setStatus('AJUSTE HORA', 'status-playing');
-
                             return null;
                         }
                     }
                 }
-                
                 if (performance.now() - lastKeyTime > RELEASE_TIMEOUT) {
                     lastDetectedKey = null;
                 }
-
                 return null;
             }
 
@@ -468,7 +412,6 @@ async function processDTMFFrame(buffer, sampleRate) {
                     "0030": { label: "AUTO 30 MIN", val: "30M" },
                     "0060": { label: "AUTO HORA CHEIA", val: "1H" }
                 };
-
                 for (let code in autoMap) {
                     if (dtmfSequence.endsWith(code)) {
                         dtmfResult.innerText = autoMap[code].label;
@@ -516,7 +459,6 @@ async function startRecording() {
         recSource.connect(analyser);
         mediaRecorder = new MediaRecorder(micStream);
         mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-        
         mediaRecorder.onstop = async () => {
             recSource.disconnect();
             if (dtmfCommand !== null) {
@@ -526,66 +468,39 @@ async function startRecording() {
                 if (dtmfCommand === "REPLAY") executarReplay().finally(resetToIdle);
                 if (dtmfCommand === "HORA") executarAnuncioDeHoraDTMF().finally(resetToIdle);
                 if (dtmfCommand === "AUTO") executarAutoConfirmacao(dtmfAudioFile).finally(resetToIdle);
-                if (dtmfCommand === "ECHO_OFF") {
-                    echoEnabled = false;
-                    executarEchoOff().finally(resetToIdle);
-                }
-                if (dtmfCommand === "ECHO_ON") {
-                    echoEnabled = true;
-                    executarEchoOn().finally(resetToIdle);
-                }
-                if (dtmfCommand === "TIME_CONFIG") {
-                    await iniciarModoAjusteHora();
-                }
+                if (dtmfCommand === "ECHO_OFF") { echoEnabled = false; executarEchoOff().finally(resetToIdle); }
+                if (dtmfCommand === "ECHO_ON") { echoEnabled = true; executarEchoOn().finally(resetToIdle); }
+                if (dtmfCommand === "TIME_CONFIG") await iniciarModoAjusteHora();
                 dtmfCommand = null;
                 return;
             }
-
             if (waitingTimeConfig && !pendingTimeConfirmation) {
-                audioChunks = [];
-                lastRecording = null;
-                return;
+                audioChunks = []; lastRecording = null; return;
             }
-
             if (pendingTimeConfirmation) {
                 const { hora, minuto } = pendingTimeConfirmation;
-                pendingTimeConfirmation = null;
-                timeConfigCompleted = false;
-                audioChunks = [];
-                lastRecording = null;
-                waitingTimeConfig = false;
-                clearInterval(timeConfigInterval);
-                timeConfigInterval = null;
-                timeConfigRemaining = TIME_CONFIG_TIMEOUT;
+                pendingTimeConfirmation = null; timeConfigCompleted = false;
+                audioChunks = []; lastRecording = null;
+                waitingTimeConfig = false; clearInterval(timeConfigInterval);
+                timeConfigInterval = null; timeConfigRemaining = TIME_CONFIG_TIMEOUT;
                 await confirmarHoraConfigurada(hora, minuto);
                 return;
             }
-
-            if (audioChunks.length > 0) {
-                lastRecording = audioChunks.slice();
-            }
+            if (audioChunks.length > 0) lastRecording = audioChunks.slice();
             processAndPlayRecording();
         };
         mediaRecorder.start(); 
         startTimer();
-    } catch (err) { 
-        setStatus('MIC ERRO', 'status-idle'); 
-        isRecording = false; 
-    }
+    } catch (err) { setStatus('MIC ERRO', 'status-idle'); isRecording = false; }
 }
 
 function stopRecording() { 
     if (mediaRecorder?.state === 'recording') mediaRecorder.stop(); 
-    stopTimer(); 
-    isRecording = false; 
+    stopTimer(); isRecording = false; 
 }
 
 async function processAndPlayRecording() {
-    if (!echoEnabled) {
-        isPlayingPTT = false; isPlaying = false;
-        resetToIdle(); checkIdleState(true);
-        return;
-    }
+    if (!echoEnabled) { isPlayingPTT = false; isPlaying = false; resetToIdle(); checkIdleState(true); return; }
     isPlaying = true; isPlayingPTT = true; 
     setStatus('REPRODUÇÃO', 'status-playing');
     try {
@@ -600,17 +515,14 @@ async function processAndPlayRecording() {
         stopPlaybackTimer(); 
     } catch (e) { console.error(e); }
     isPlayingPTT = false; isPlaying = false;
-    resetToIdle();
-    checkIdleState(true); 
+    resetToIdle(); checkIdleState(true); 
 }
 
 // ==========================================
-// ⏰ SISTEMA DE HORA, REPLAY, AUTO E ECHO
+// ⏰ AUXILIARES E EVENTOS
 // ==========================================
 async function executarEchoOff() {
-    if (isPlaying) return;
-    isPlaying = true;
-    setStatus('ECHO OFF', 'status-playing');
+    isPlaying = true; setStatus('ECHO OFF', 'status-playing');
     await playBeep(TONE_START_FREQ, TONE_DURATION);
     await playAudioFile("echo_off.mp3");
     await playBeep(TONE_END_FREQ, TONE_DURATION);
@@ -619,9 +531,7 @@ async function executarEchoOff() {
 }
 
 async function executarEchoOn() {
-    if (isPlaying) return;
-    isPlaying = true;
-    setStatus('ECHO ON', 'status-playing');
+    isPlaying = true; setStatus('ECHO ON', 'status-playing');
     await playBeep(TONE_START_FREQ, TONE_DURATION);
     await playAudioFile("echo_on.mp3");
     await playBeep(TONE_END_FREQ, TONE_DURATION);
@@ -634,21 +544,18 @@ async function executarAnuncioDeHora() {
     pendingAnnouncement = false; isPlaying = true;
     setStatus('HORA', 'status-playing');
     const agora = getVirtualDate();
-    const h = agora.getHours().toString().padStart(2, '0');
-    const m = agora.getMinutes().toString().padStart(2, '0');
+    const h = agora.getHours().toString().padStart(2, '0'), m = agora.getMinutes().toString().padStart(2, '0');
     await playBeep(TONE_START_FREQ, TONE_DURATION);
     let playedCustom = false;
     if (customAudioData) {
         try {
             const resp = await fetch(customAudioData);
             const buffer = await audioCtx.decodeAudioData(await resp.arrayBuffer());
-            await playBuffer(buffer);
-            playedCustom = true;
+            await playBuffer(buffer); playedCustom = true;
         } catch (e) { playedCustom = false; }
     }
     if (!playedCustom) await playAudioFile('chamada.mp3');
-    await playAudioFile(`${h}h.mp3`); 
-    await playAudioFile(`${m}m.mp3`);
+    await playAudioFile(`${h}h.mp3`); await playAudioFile(`${m}m.mp3`);
     await playBeep(TONE_END_FREQ, TONE_DURATION);
     await new Promise(resolve => setTimeout(resolve, 500));
     isPlaying = false; 
@@ -656,21 +563,14 @@ async function executarAnuncioDeHora() {
 
 async function executarAnuncioDeHoraDTMF() {
     if (audioCtx.state === 'suspended') await audioCtx.resume();
-    pendingAnnouncement = false;
-    isPlaying = true;
+    pendingAnnouncement = false; isPlaying = true;
     setStatus('HORA', 'status-playing');
     const agora = getVirtualDate();
     const hora = agora.getHours();
-    let saudacao = "";
-    if (hora >= 0 && hora <= 11) { saudacao = "dia.mp3"; } 
-    else if (hora >= 12 && hora <= 17) { saudacao = "tarde.mp3"; } 
-    else { saudacao = "noite.mp3"; }
-    const h = hora.toString().padStart(2, '0');
-    const m = agora.getMinutes().toString().padStart(2, '0');
+    let saudacao = (hora >= 0 && hora <= 11) ? "dia.mp3" : (hora >= 12 && hora <= 17) ? "tarde.mp3" : "noite.mp3";
+    const h = hora.toString().padStart(2, '0'), m = agora.getMinutes().toString().padStart(2, '0');
     await playBeep(TONE_START_FREQ, TONE_DURATION);
-    await playAudioFile(saudacao);
-    await playAudioFile(`${h}h.mp3`);
-    await playAudioFile(`${m}m.mp3`);
+    await playAudioFile(saudacao); await playAudioFile(`${h}h.mp3`); await playAudioFile(`${m}m.mp3`);
     await playBeep(TONE_END_FREQ, TONE_DURATION);
     await new Promise(resolve => setTimeout(resolve, 500));
     isPlaying = false;
@@ -678,102 +578,63 @@ async function executarAnuncioDeHoraDTMF() {
 
 async function executarReplay() {
     if (isPlaying) return;
-    isPlaying = true;
-    setStatus('REPLAY', 'status-playing');
+    isPlaying = true; setStatus('REPLAY', 'status-playing');
     try {
         if (!lastRecording || lastRecording.length === 0) { isPlaying = false; return; }
         const audioBlob = new Blob(lastRecording, { type: 'audio/webm' });
         const audioBuffer = await audioCtx.decodeAudioData(await audioBlob.arrayBuffer());
-        
-        const totalDur = audioBuffer.duration;
-        
         await playBeep(TONE_START_FREQ, TONE_DURATION);
         await playAudioFile("replay.mp3");
-        startPlaybackTimer(totalDur);
+        startPlaybackTimer(audioBuffer.duration);
         await playBuffer(audioBuffer);
         await playBeep(TONE_END_FREQ, TONE_DURATION);
         await new Promise(resolve => setTimeout(resolve, 500));
     } catch (e) { console.error(e); }
-    stopPlaybackTimer();
-    isPlaying = false;
+    stopPlaybackTimer(); isPlaying = false;
 }
 
 async function executarAutoConfirmacao(file) {
     if (isPlaying) return;
-    isPlaying = true;
-    setStatus('CONFIRMAÇÃO', 'status-playing');
+    isPlaying = true; setStatus('CONFIRMAÇÃO', 'status-playing');
     try {
-        await playBeep(TONE_START_FREQ, TONE_DURATION);
-        await playAudioFile(file);
-        await playBeep(TONE_END_FREQ, TONE_DURATION);
+        await playBeep(TONE_START_FREQ, TONE_DURATION); await playAudioFile(file); await playBeep(TONE_END_FREQ, TONE_DURATION);
         await new Promise(resolve => setTimeout(resolve, 500));
-    } catch (e) { console.error("Erro no áudio de confirmação: ", e); }
+    } catch (e) { console.error(e); }
     isPlaying = false;
 }
 
 async function iniciarModoAjusteHora() {
-    if (isPlaying) return;
-    
-    timeConfigSequence = "";
-    resetDTMFUI();
-    resetTimerUI();
-    timeConfigCompleted = false;
-    pendingTimeConfirmation = null;
-    isPlaying = true;
-    setStatus('AJUSTE HORA', 'status-playing');
-    await playBeep(TONE_START_FREQ, TONE_DURATION);
-    await playAudioFile("ajtm.mp3");
-    await playBeep(TONE_END_FREQ, TONE_DURATION);
-    
+    timeConfigSequence = ""; resetDTMFUI(); resetTimerUI();
+    timeConfigCompleted = false; pendingTimeConfirmation = null;
+    isPlaying = true; setStatus('AJUSTE HORA', 'status-playing');
+    await playBeep(TONE_START_FREQ, TONE_DURATION); await playAudioFile("ajtm.mp3"); await playBeep(TONE_END_FREQ, TONE_DURATION);
     await new Promise(resolve => setTimeout(resolve, 500));
-
-    isPlaying = false;
-    waitingTimeConfig = true;
-    
+    isPlaying = false; waitingTimeConfig = true;
     timeConfigRemaining = TIME_CONFIG_TIMEOUT;
     clearInterval(timeConfigInterval);
     timeConfigInterval = setInterval(async () => {
-        if (!waitingTimeConfig) {
-            clearInterval(timeConfigInterval);
-            return;
-        }
-
-        if (isRecording) {
-            return;
-        }
-
+        if (!waitingTimeConfig) { clearInterval(timeConfigInterval); return; }
+        if (isRecording) return;
         timeConfigRemaining -= 100;
-
         if (timeConfigRemaining <= 0) {
             clearInterval(timeConfigInterval);
-            waitingTimeConfig = false;
-            timeConfigSequence = "";
-            timeConfigCompleted = false;
-            pendingTimeConfirmation = null;
-
-            await playBeep(TONE_START_FREQ, TONE_DURATION);
-            await playAudioFile("end.mp3");
-            await playBeep(TONE_END_FREQ, TONE_DURATION);
+            waitingTimeConfig = false; timeConfigSequence = ""; timeConfigCompleted = false; pendingTimeConfirmation = null;
+            await playBeep(TONE_START_FREQ, TONE_DURATION); await playAudioFile("end.mp3"); await playBeep(TONE_END_FREQ, TONE_DURATION);
             await new Promise(resolve => setTimeout(resolve, 500));
-            resetTimerUI();
-            resetToIdle();
+            resetTimerUI(); resetToIdle();
         }
     }, 100);
 }
 
 async function confirmarHoraConfigurada(hora, minuto) {
-    isPlaying = true;
-    setStatus('HORA AJUSTADA', 'status-playing');
+    isPlaying = true; setStatus('HORA AJUSTADA', 'status-playing');
     await playBeep(TONE_START_FREQ, TONE_DURATION);
     await playAudioFile("confirmado.mp3");
     await playAudioFile(`${hora.toString().padStart(2,'0')}h.mp3`);
     await playAudioFile(`${minuto.toString().padStart(2,'0')}m.mp3`);
     await playBeep(TONE_END_FREQ, TONE_DURATION);
     await new Promise(resolve => setTimeout(resolve, 500));
-    isPlaying = false;
-    timeConfigSequence = "";
-    resetTimerUI();
-    resetToIdle();
+    isPlaying = false; timeConfigSequence = ""; resetTimerUI(); resetToIdle();
 }
 
 function startClockSync() {
@@ -791,23 +652,15 @@ function startClockSync() {
     }, 1000);
 }
 
-// ==========================================
-// ⟲ BOOT E INICIALIZAÇÃO
-// ==========================================
 customAudioInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const file = e.target.files[0]; if (!file) return;
     try {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const arrayBuffer = await file.arrayBuffer();
-        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-        if (audioBuffer.duration > MAX_CUSTOM_AUDIO_DURATION) {
-            alert("Limite 30s."); resetCustomAudio(); return;
-        }
+        const buffer = await audioCtx.decodeAudioData(await file.arrayBuffer());
+        if (buffer.duration > MAX_CUSTOM_AUDIO_DURATION) { alert("Limite 30s."); resetCustomAudio(); return; }
         const reader = new FileReader();
         reader.onload = (ev) => {
-            customAudioData = ev.target.result;
-            customAudioName = file.name;
+            customAudioData = ev.target.result; customAudioName = file.name;
             localStorage.setItem('ptt_customAudioData', customAudioData);
             localStorage.setItem('ptt_customAudioName', customAudioName);
             updateAudioLabel();
@@ -818,8 +671,7 @@ customAudioInput.addEventListener('change', async (e) => {
 
 function resetCustomAudio() {
     customAudioData = null; customAudioName = null;
-    localStorage.removeItem('ptt_customAudioData');
-    localStorage.removeItem('ptt_customAudioName');
+    localStorage.removeItem('ptt_customAudioData'); localStorage.removeItem('ptt_customAudioName');
     customAudioInput.value = ''; updateAudioLabel();
 }
 
@@ -841,17 +693,13 @@ async function forceInitialize() {
     try {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        dtmfAnalyser = audioCtx.createAnalyser();
-        dtmfAnalyser.fftSize = 2048;
+        dtmfAnalyser = audioCtx.createAnalyser(); dtmfAnalyser.fftSize = 2048;
         dtmfDataArray = new Float32Array(dtmfAnalyser.fftSize);
-        dtmfSource = audioCtx.createMediaStreamSource(micStream);
-        dtmfSource.connect(dtmfAnalyser);
-        analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 2048;
+        dtmfSource = audioCtx.createMediaStreamSource(micStream); dtmfSource.connect(dtmfAnalyser);
+        analyser = audioCtx.createAnalyser(); analyser.fftSize = 2048;
         dataArray = new Float32Array(analyser.frequencyBinCount);
         startVUMeter(); startContinuousDTMF(); startClockSync();
-        isPlaying = true; 
-        setStatus('INICIANDO', 'status-playing');
+        isPlaying = true; setStatus('INICIANDO', 'status-playing');
         await playBeep(TONE_START_FREQ, TONE_DURATION);
         try { await playAudioFile('boot.mp3'); } catch(e) {}
         await playBeep(TONE_END_FREQ, TONE_DURATION);
@@ -871,8 +719,29 @@ window.addEventListener('keyup', (e) => {
         e.preventDefault();
         if (pttReleaseTimer) clearTimeout(pttReleaseTimer);
         pttReleaseTimer = setTimeout(() => {
-            if (forceWaitRelease) { forceWaitRelease = false; activeKey = null; processAndPlayRecording(); } 
-            else if (isRecording) { activeKey = null; stopRecording(); }
+            if (forceWaitRelease) { 
+                forceWaitRelease = false; 
+                // CORREÇÃO 2: Limpeza completa ao soltar
+                activeKey = null;
+                dtmfSequence = "";
+                dtmfLocked = false;
+                lastDetectedKey = null;
+                stableKey = null;
+                stableCount = 0;
+                dbgSeq.innerText = "";
+                processAndPlayRecording(); 
+            } 
+            else if (isRecording) { 
+                // CORREÇÃO 2: Limpeza completa ao soltar
+                activeKey = null;
+                dtmfSequence = "";
+                dtmfLocked = false;
+                lastDetectedKey = null;
+                stableKey = null;
+                stableCount = 0;
+                dbgSeq.innerText = "";
+                stopRecording(); 
+            }
         }, 400);
     }
 });
@@ -887,8 +756,7 @@ btnResetAudio.onclick = resetCustomAudio;
 
 function playBeep(freq, dur) {
     return new Promise(resolve => {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
+        const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
         osc.type = 'sine'; osc.frequency.value = freq;
         gain.gain.setValueAtTime(0, audioCtx.currentTime);
         gain.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + 0.01);
@@ -908,8 +776,8 @@ async function playAudioFile(file) {
 
 function playBuffer(buf) {
     return new Promise(res => {
-        const src = audioCtx.createBufferSource();
-        src.buffer = buf; src.connect(analyser); analyser.connect(audioCtx.destination);
+        const src = audioCtx.createBufferSource(); src.buffer = buf;
+        src.connect(analyser); analyser.connect(audioCtx.destination);
         src.onended = res; src.start(0);
     });
 }
