@@ -652,7 +652,13 @@ async function confirmarHoraConfigurada(hora, minuto) {
     await playAudioFile(`${minuto.toString().padStart(2,'0')}m.mp3`);
     await playBeep(TONE_END_FREQ, TONE_DURATION);
     await new Promise(resolve => setTimeout(resolve, 500));
-    isPlaying = false; timeConfigSequence = ""; resetTimerUI(); resetToIdle();
+    waitingTimeConfig = false;
+    timeConfigCompleted = false;
+    timeConfigSequence = "";
+    pendingTimeConfirmation = null;
+    pendingReentryPlayback = false;
+    discardCurrentRecording = false;
+    isPlaying = false; resetTimerUI(); resetToIdle();
 }
 
 function startClockSync() {
