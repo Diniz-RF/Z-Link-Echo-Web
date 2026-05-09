@@ -715,6 +715,8 @@ async function iniciarModoAjusteHora() {
     if (isPlaying) return;
     
     timeConfigSequence = "";
+    resetDTMFUI();
+    resetTimerUI();
     timeConfigCompleted = false;
     pendingTimeConfirmation = null;
     isPlaying = true;
@@ -753,6 +755,7 @@ async function iniciarModoAjusteHora() {
             await playAudioFile("end.mp3");
             await playBeep(TONE_END_FREQ, TONE_DURATION);
             await new Promise(resolve => setTimeout(resolve, 500));
+            resetTimerUI();
             resetToIdle();
         }
     }, 100);
