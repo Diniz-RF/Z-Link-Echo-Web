@@ -612,6 +612,7 @@ async function executarEchoOff() {
     await playBeep(TONE_START_FREQ, TONE_DURATION);
     await playAudioFile("echo_off.mp3");
     await playBeep(TONE_END_FREQ, TONE_DURATION);
+    await new Promise(resolve => setTimeout(resolve, 500));
     isPlaying = false;
 }
 
@@ -622,6 +623,7 @@ async function executarEchoOn() {
     await playBeep(TONE_START_FREQ, TONE_DURATION);
     await playAudioFile("echo_on.mp3");
     await playBeep(TONE_END_FREQ, TONE_DURATION);
+    await new Promise(resolve => setTimeout(resolve, 500));
     isPlaying = false;
 }
 
@@ -667,6 +669,7 @@ async function executarAnuncioDeHoraDTMF() {
     await playAudioFile(`${h}h.mp3`);
     await playAudioFile(`${m}m.mp3`);
     await playBeep(TONE_END_FREQ, TONE_DURATION);
+    await new Promise(resolve => setTimeout(resolve, 500));
     isPlaying = false;
 }
 
@@ -686,6 +689,7 @@ async function executarReplay() {
         startPlaybackTimer(totalDur);
         await playBuffer(audioBuffer);
         await playBeep(TONE_END_FREQ, TONE_DURATION);
+        await new Promise(resolve => setTimeout(resolve, 500));
     } catch (e) { console.error(e); }
     stopPlaybackTimer();
     isPlaying = false;
@@ -699,6 +703,7 @@ async function executarAutoConfirmacao(file) {
         await playBeep(TONE_START_FREQ, TONE_DURATION);
         await playAudioFile(file);
         await playBeep(TONE_END_FREQ, TONE_DURATION);
+        await new Promise(resolve => setTimeout(resolve, 500));
     } catch (e) { console.error("Erro no áudio de confirmação: ", e); }
     isPlaying = false;
 }
