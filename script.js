@@ -248,6 +248,79 @@ async function processDTMFFrame(buffer, sampleRate) {
                     lastKeyTime = performance.now();
                     
                     timeConfigSequence += stableKey;
+
+                    function isValidTimePrefix(seq) {
+                        if (seq === "7" || seq === "78" || seq === "788" || seq === "7886") {
+                            return true;
+                        }
+
+                        if (!/^[0-9]+$/.test(seq)) {
+                            return false;
+                        }
+
+                        if (seq.length === 1) {
+                            return ["0", "1", "2"].includes(seq);
+                        }
+
+                        if (seq.length === 2) {
+                            const hh = parseInt(seq);
+                            return hh >= 0 && hh <= 23;
+                        }
+
+                        if (seq.length === 3) {
+                            const hh = parseInt(seq.slice(0, 2));
+                            const mm1 = parseInt(seq[2]);
+                            return (
+                                hh >= 0 &&
+                                hh <= 23 &&
+                                mm1 >= 0 &&
+                                mm1 <= 5
+                            );
+                        }
+
+                        if (seq.length === 4) {
+                            const hh = parseInt(seq.slice(0, 2));
+                            const mm = parseInt(seq.slice(2, 4));
+                            return (
+                                hh >= 0 &&
+                                hh <= 23 &&
+                                mm >= 0 &&
+                                mm <= 59
+                            );
+                        }
+
+                        return false;
+                    }
+
+                    if (!isValidTimePrefix(timeConfigSequence)) {
+                        timeConfigSequence = "";
+                        pendingTimeConfirmation = null;
+                        timeConfigCompleted = false;
+
+                        timeConfigRemaining = 10000;
+
+                        audioChunks = [];
+                        lastRecording = null;
+
+                        isPlaying = true;
+
+                        setStatus('AJUSTE HORA', 'status-playing');
+
+                        await playBeep(TONE_START_FREQ, TONE_DURATION);
+
+                        await playAudioFile("reentry.mp3");
+
+                        await playBeep(TONE_END_FREQ, TONE_DURATION);
+
+                        await new Promise(resolve => setTimeout(resolve, 500));
+
+                        isPlaying = false;
+
+                        setStatus('AJUSTE HORA', 'status-playing');
+
+                        return null;
+                    }
+
                     timeConfigRemaining = 10000;
                     timeConfigSequence = timeConfigSequence.replace(/[^0-9]/g, '');
 
@@ -271,6 +344,9 @@ async function processDTMFFrame(buffer, sampleRate) {
                         appStartTime = Date.now();
 
                         timeConfigSequence = "";
+
+                        audioChunks = [];
+                        lastRecording = null;
 
                         isPlaying = true;
 
