@@ -247,7 +247,6 @@ async function processDTMFFrame(buffer, sampleRate) {
                     lastDetectedKey = stableKey;
                     lastKeyTime = performance.now();
                     
-                    // CORREÇÃO 1: Ignorar o caractere # totalmente no ajuste de hora
                     if (stableKey === "#") {
                         return null;
                     }
@@ -721,7 +720,6 @@ window.addEventListener('keyup', (e) => {
         pttReleaseTimer = setTimeout(() => {
             if (forceWaitRelease) { 
                 forceWaitRelease = false; 
-                // CORREÇÃO 2: Limpeza completa ao soltar
                 activeKey = null;
                 dtmfSequence = "";
                 dtmfLocked = false;
@@ -732,7 +730,6 @@ window.addEventListener('keyup', (e) => {
                 processAndPlayRecording(); 
             } 
             else if (isRecording) { 
-                // CORREÇÃO 2: Limpeza completa ao soltar
                 activeKey = null;
                 dtmfSequence = "";
                 dtmfLocked = false;
