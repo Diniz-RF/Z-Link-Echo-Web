@@ -36,7 +36,8 @@ let pendingTimeConfirmation = null;
 
 let waitingTimeConfig = false;
 let timeConfigTimeout = null;
-let timeConfigRemaining = 10000;
+const TIME_CONFIG_TIMEOUT = 15000;
+let timeConfigRemaining = TIME_CONFIG_TIMEOUT;
 let timeConfigInterval = null;
 let timeConfigSequence = "";
 let timeConfigCompleted = false;
@@ -297,7 +298,7 @@ async function processDTMFFrame(buffer, sampleRate) {
                         pendingTimeConfirmation = null;
                         timeConfigCompleted = false;
 
-                        timeConfigRemaining = 10000;
+                        timeConfigRemaining = TIME_CONFIG_TIMEOUT;
 
                         audioChunks = [];
                         lastRecording = null;
@@ -321,7 +322,7 @@ async function processDTMFFrame(buffer, sampleRate) {
                         return null;
                     }
 
-                    timeConfigRemaining = 10000;
+                    timeConfigRemaining = TIME_CONFIG_TIMEOUT;
                     timeConfigSequence = timeConfigSequence.replace(/[^0-9]/g, '');
 
                     if (timeConfigSequence.length > 4) {
@@ -338,7 +339,7 @@ async function processDTMFFrame(buffer, sampleRate) {
                         clearInterval(timeConfigInterval);
                         timeConfigInterval = null;
 
-                        timeConfigRemaining = 10000;
+                        timeConfigRemaining = TIME_CONFIG_TIMEOUT;
 
                         virtualBaseTime = Date.now();
                         appStartTime = Date.now();
@@ -391,7 +392,7 @@ async function processDTMFFrame(buffer, sampleRate) {
                             pendingTimeConfirmation = null;
                             timeConfigCompleted = false;
 
-                            timeConfigRemaining = 10000;
+                            timeConfigRemaining = TIME_CONFIG_TIMEOUT;
 
                             isPlaying = true;
 
@@ -555,7 +556,7 @@ async function startRecording() {
                 waitingTimeConfig = false;
                 clearInterval(timeConfigInterval);
                 timeConfigInterval = null;
-                timeConfigRemaining = 10000;
+                timeConfigRemaining = TIME_CONFIG_TIMEOUT;
                 await confirmarHoraConfigurada(hora, minuto);
                 return;
             }
@@ -726,7 +727,7 @@ async function iniciarModoAjusteHora() {
 
     isPlaying = false;
     
-    timeConfigRemaining = 10000;
+    timeConfigRemaining = TIME_CONFIG_TIMEOUT;
     clearInterval(timeConfigInterval);
     timeConfigInterval = setInterval(async () => {
         if (!waitingTimeConfig) {
