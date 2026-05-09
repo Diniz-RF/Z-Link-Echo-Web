@@ -595,6 +595,7 @@ async function processAndPlayRecording() {
         await playBeep(TONE_START_FREQ, TONE_DURATION);
         await playBuffer(audioBuffer);
         await playBeep(TONE_END_FREQ, TONE_DURATION);
+        await new Promise(resolve => setTimeout(resolve, 500));
         stopPlaybackTimer(); 
     } catch (e) { console.error(e); }
     isPlayingPTT = false; isPlaying = false;
@@ -648,6 +649,7 @@ async function executarAnuncioDeHora() {
     await playAudioFile(`${h}h.mp3`); 
     await playAudioFile(`${m}m.mp3`);
     await playBeep(TONE_END_FREQ, TONE_DURATION);
+    await new Promise(resolve => setTimeout(resolve, 500));
     isPlaying = false; 
 }
 
@@ -748,7 +750,7 @@ async function iniciarModoAjusteHora() {
             await playBeep(TONE_START_FREQ, TONE_DURATION);
             await playAudioFile("end.mp3");
             await playBeep(TONE_END_FREQ, TONE_DURATION);
-
+            await new Promise(resolve => setTimeout(resolve, 500));
             resetToIdle();
         }
     }, 100);
@@ -848,6 +850,7 @@ async function forceInitialize() {
         await playBeep(TONE_START_FREQ, TONE_DURATION);
         try { await playAudioFile('boot.mp3'); } catch(e) {}
         await playBeep(TONE_END_FREQ, TONE_DURATION);
+        await new Promise(resolve => setTimeout(resolve, 500));
         isPlaying = false; isSystemReady = true; resetToIdle();
     } catch (err) { setTimeout(forceInitialize, 2000); }
 }
